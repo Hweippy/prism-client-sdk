@@ -114,7 +114,7 @@ This example builds a two-pool menu for a 2-hop candidate. The caller is still r
 [7, flags, max_meteora_bins, num_mints, num_pools, min_profit_base_units_le_u64, market_ids...]
 ```
 
-`max_meteora_bins` is Prism's wire byte for Meteora DLMM search width. Prism uses this value as the per-direction bin-walk request for both Up and Down DLMM walks, then clamps it to the program-side capacity. For example, `20` asks Prism to walk up to 20 bins in each direction.
+`max_meteora_bins` is Prism's wire byte for Meteora DLMM search width. Prism uses this value as the per-direction bin-walk request for both Up and Down DLMM walks, then clamps it to the program-side capacity. For example, `20` asks Prism to walk up to 20 bins in each direction. Raising this value can find deeper DLMM liquidity, but increases compute and bin-array coverage pressure; lowering it keeps attempts lighter, but can miss routes that need a wider walk.
 
 `min_profit_base_units` is denominated in the submitted base mint's atomic
 units. For WSOL this is native lamports. For USDC, USDT, and USD1 it is
