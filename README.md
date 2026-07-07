@@ -79,7 +79,7 @@ let ix = build_find_arb_v2_instruction(FindArbV2Params {
     flashloan: true,
     fail_if_no_profit: true,
     min_profit_base_units: 10_000,
-    max_meteora_bins: 20,
+    max_dynamic_walk_steps: 20,
     route_mints: vec![MintAccount {
         mint: token_mint,
         token_program: SPL_TOKEN,
@@ -111,10 +111,10 @@ This example builds a two-pool menu for a 2-hop candidate. The caller is still r
 `find_arb_v2` data layout:
 
 ```text
-[7, flags, max_meteora_bins, num_mints, num_pools, min_profit_base_units_le_u64, market_ids...]
+[7, flags, max_dynamic_walk_steps, num_mints, num_pools, min_profit_base_units_le_u64, market_ids...]
 ```
 
-`max_meteora_bins` is Prism's wire byte for Meteora DLMM search width. Prism uses this value as the per-direction bin-walk request for both Up and Down DLMM walks, then clamps it to the program-side capacity. For example, `20` asks Prism to walk up to 20 bins in each direction. Raising this value can find deeper DLMM liquidity, but increases compute and bin-array coverage pressure; lowering it keeps attempts lighter, but can miss routes that need a wider walk.
+`max_dynamic_walk_steps` is Prism's wire byte for dynamic walk-table depth. Prism uses it as the per-direction DLMM bin-walk request and as the produced-step cap for selected CL-family tick walks, then clamps it to each program-side capacity. For example, `20` asks Prism to walk up to 20 DLMM bins or selected CL tick steps per direction. Raising this value can find deeper walked liquidity, but increases compute and account-window pressure; lowering it keeps attempts lighter, but can miss routes that need a wider walk.
 
 `min_profit_base_units` is denominated in the submitted base mint's atomic
 units. For WSOL this is native lamports. For USDC, USDT, and USD1 it is

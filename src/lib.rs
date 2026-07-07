@@ -43,11 +43,12 @@ pub struct FindArbV2Params {
     /// token units, so callers must convert any native SOL tip into base units
     /// before building the instruction.
     pub min_profit_base_units: u64,
-    /// Wire byte forwarded to Prism for Meteora DLMM search width.
+    /// Wire byte forwarded to Prism for dynamic walk-table depth.
     ///
-    /// Prism uses this value as the per-direction bin-walk request for both Up
-    /// and Down DLMM walks, then clamps it to the program-side capacity.
-    pub max_meteora_bins: u8,
+    /// Prism uses this as the per-direction DLMM bin-walk request and as the
+    /// produced-step cap for selected CL-family tick walks, then clamps it to
+    /// each program-side capacity.
+    pub max_dynamic_walk_steps: u8,
     pub route_mints: Vec<MintAccount>,
     pub pools: Vec<MarketAccounts>,
 }
@@ -88,7 +89,7 @@ pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruct
     let mut data = Vec::with_capacity(13 + params.pools.len());
     data.push(FIND_ARB_V2_DISCRIMINATOR);
     data.push(flags(params.flashloan, params.fail_if_no_profit));
-    data.push(params.max_meteora_bins);
+    data.push(params.max_dynamic_walk_steps);
     data.push(num_mints);
     data.push(num_pools);
     data.extend_from_slice(&params.min_profit_base_units.to_le_bytes());

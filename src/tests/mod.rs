@@ -35,7 +35,7 @@ fn params(pool: MarketAccounts) -> FindArbV2Params {
         flashloan: true,
         fail_if_no_profit: true,
         min_profit_base_units: 12_345,
-        max_meteora_bins: 24,
+        max_dynamic_walk_steps: 24,
         route_mints: vec![MintAccount {
             mint: unique(202),
             token_program: spl_token_interface::ID,
