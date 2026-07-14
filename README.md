@@ -43,6 +43,8 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 | SolFi v2 | `SV2EYYJyRz2YhfXwXnhNAevDEui5Q6yrfyo13WtupPF` |
 | Futarchy | `FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq` |
 | Fusion | `fUSioN9YKKSa3CUC2YUc4tPkHJ5Y6XW1yz8y6F7qWz9` |
+| BisonFi | `BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi` |
+| Tessera | `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH` |
 
 ## Route Shape
 
@@ -235,6 +237,8 @@ user ATA                 writable
 21 SolfiV2
 22 FutarchySpot
 23 Fusion
+24 BisonFi
+25 Tessera
 ```
 
 ## Market Accounts
@@ -610,6 +614,39 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 12 W   tick_array_below_2                 caller
 13     Fusion program                     SDK constant
 ```
+
+### BisonFi
+
+```text
+0  W   pool                               caller
+1  W   vault_a                            caller
+2  W   vault_b                            caller
+3      instructions sysvar                SDK constant
+4      trailing account                   SDK constant
+5      BisonFi program                    SDK constant
+6      Prism program                      SDK constant
+```
+
+Only the pool's canonical mint A -> mint B direction is supported. Supply
+`BisonFiAccounts` only when the desired route consumes mint A and produces mint B;
+Prism does not scout or execute the reverse mint B -> mint A edge.
+
+### Tessera
+
+```text
+0      global_authority                   caller
+1  W   pool                               caller
+2  W   mint_a_vault                       caller
+3  W   mint_b_vault                       caller
+4      mint_a                             caller
+5      mint_b                             caller
+6      instructions sysvar                SDK constant
+7      Tessera program                    SDK constant
+```
+
+Tessera uses the public opcode `0x10` path. The instructions sysvar is quote-critical because
+Tessera scans top-level instruction program ids to determine whether its pool fee is waived. The
+alternate router-profile opcode `0x11` is intentionally not part of Prism's adapter contract.
 
 The caller is responsible for using the correct dynamic pool, vault, mint, token program, tick/bin array, side-table, fee, and optional sentinel accounts for the selected market.
 

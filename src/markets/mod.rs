@@ -7,6 +7,7 @@ use crate::{
 };
 
 pub mod alphaq;
+pub mod bisonfi;
 pub mod byreal;
 pub mod fusion;
 pub mod futarchy;
@@ -19,6 +20,7 @@ pub mod pancakeswap;
 pub mod pumpfun;
 pub mod raydium;
 pub mod solfi;
+pub mod tessera;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -47,6 +49,8 @@ pub enum MarketId {
     SolfiV2 = 21,
     FutarchySpot = 22,
     Fusion = 23,
+    BisonFi = 24,
+    Tessera = 25,
 }
 
 impl MarketId {
@@ -80,6 +84,8 @@ impl MarketId {
             Self::SolfiV2 => "SolfiV2",
             Self::FutarchySpot => "FutarchySpot",
             Self::Fusion => "Fusion",
+            Self::BisonFi => "BisonFi",
+            Self::Tessera => "Tessera",
         }
     }
 }
@@ -113,6 +119,8 @@ impl TryFrom<u8> for MarketId {
             21 => Ok(Self::SolfiV2),
             22 => Ok(Self::FutarchySpot),
             23 => Ok(Self::Fusion),
+            24 => Ok(Self::BisonFi),
+            25 => Ok(Self::Tessera),
             other => Err(BuildError::UnsupportedMarketId(other)),
         }
     }
@@ -145,6 +153,8 @@ pub enum MarketAccounts {
     SolfiV2(solfi::SolfiV2Accounts),
     FutarchySpot(futarchy::FutarchySpotAccounts),
     Fusion(fusion::FusionAccounts),
+    BisonFi(bisonfi::BisonFiAccounts),
+    Tessera(tessera::TesseraAccounts),
 }
 
 impl MarketAccounts {
@@ -174,6 +184,8 @@ impl MarketAccounts {
             Self::SolfiV2(_) => MarketId::SolfiV2,
             Self::FutarchySpot(_) => MarketId::FutarchySpot,
             Self::Fusion(_) => MarketId::Fusion,
+            Self::BisonFi(_) => MarketId::BisonFi,
+            Self::Tessera(_) => MarketId::Tessera,
         }
     }
 
@@ -207,6 +219,8 @@ impl MarketAccounts {
             Self::SolfiV2(_) => 11,
             Self::FutarchySpot(_) => 5,
             Self::Fusion(_) => 14,
+            Self::BisonFi(_) => 7,
+            Self::Tessera(_) => 8,
         }
     }
 
@@ -236,6 +250,8 @@ impl MarketAccounts {
             Self::SolfiV2(accounts) => solfi::append_v2(out, accounts),
             Self::FutarchySpot(accounts) => futarchy::append_spot(out, accounts),
             Self::Fusion(accounts) => fusion::append(out, accounts),
+            Self::BisonFi(accounts) => bisonfi::append(out, accounts),
+            Self::Tessera(accounts) => tessera::append(out, accounts),
         }
     }
 }

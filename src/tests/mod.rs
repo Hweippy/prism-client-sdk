@@ -1,11 +1,12 @@
 use solana_instruction::AccountMeta;
 use solana_pubkey::Pubkey;
 
+use crate::constants::SYSVAR_INSTRUCTIONS;
 use crate::*;
 use crate::markets::{
-    alphaq::*, byreal::*, fusion::*, futarchy::*, goonfi::*, humidifi::*, manifest::*,
-    meteora::*, orca::*, pancakeswap::*, pumpfun::*, raydium::*, solfi::*, MarketAccounts,
-    MarketId,
+    alphaq::*, bisonfi::*, byreal::*, fusion::*, futarchy::*, goonfi::*, humidifi::*, manifest::*,
+    meteora::*, orca::*, pancakeswap::*, pumpfun::*, raydium::*, solfi::*, tessera::*,
+    MarketAccounts, MarketId,
 };
 
 fn unique(seed: u8) -> Pubkey {
@@ -206,6 +207,64 @@ fn typed_market_variant_sets_market_id_without_runtime_pairing() {
     let ix = build_find_arb_v2_instruction(params).unwrap();
     assert_eq!(ix.data[13], MarketId::FutarchySpot.as_u8());
     assert_eq!(ix.data[14], MarketId::RaydiumCp.as_u8());
+}
+
+#[test]
+fn tessera_emits_public_swap_account_slice() {
+    let accounts = TesseraAccounts {
+        global_authority: unique(1),
+        pool: unique(2),
+        mint_a_vault: unique(3),
+        mint_b_vault: unique(4),
+        mint_a: unique(5),
+        mint_b: unique(6),
+    };
+    let market = MarketAccounts::Tessera(accounts);
+    let mut metas = Vec::new();
+    market.append_account_metas(&mut metas);
+
+    assert_eq!(market.market_id(), MarketId::Tessera);
+    assert_eq!(market.account_count(), 8);
+    assert_eq!(
+        metas,
+        vec![
+            AccountMeta::new_readonly(accounts.global_authority, false),
+            AccountMeta::new(accounts.pool, false),
+            AccountMeta::new(accounts.mint_a_vault, false),
+            AccountMeta::new(accounts.mint_b_vault, false),
+            AccountMeta::new_readonly(accounts.mint_a, false),
+            AccountMeta::new_readonly(accounts.mint_b, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
+            AccountMeta::new_readonly(TESSERA, false),
+        ]
+    );
+}
+
+#[test]
+fn bisonfi_emits_forward_swap_account_slice() {
+    let accounts = BisonFiAccounts {
+        pool: unique(1),
+        vault_a: unique(2),
+        vault_b: unique(3),
+    };
+    let market = MarketAccounts::BisonFi(accounts);
+    let mut metas = Vec::new();
+    market.append_account_metas(&mut metas);
+
+    assert_eq!(market.market_id(), MarketId::BisonFi);
+    assert_eq!(market.account_count(), 7);
+    assert_eq!(
+        metas,
+        vec![
+            AccountMeta::new(accounts.pool, false),
+            AccountMeta::new(accounts.vault_a, false),
+            AccountMeta::new(accounts.vault_b, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
+            AccountMeta::new_readonly(BISONFI_TRAILING_ACCOUNT, false),
+            AccountMeta::new_readonly(BISONFI, false),
+            AccountMeta::new_readonly(PROGRAM_ID, false),
+        ]
+    );
 }
 
 #[test]
@@ -533,6 +592,25 @@ fn all_market_slices_have_expected_writable_orders() {
             }),
             vec![3, 6, 7, 8, 9, 10, 11, 12],
         ),
+        (
+            MarketAccounts::BisonFi(BisonFiAccounts {
+                pool: unique(1),
+                vault_a: unique(2),
+                vault_b: unique(3),
+            }),
+            vec![0, 1, 2],
+        ),
+        (
+            MarketAccounts::Tessera(TesseraAccounts {
+                global_authority: unique(1),
+                pool: unique(2),
+                mint_a_vault: unique(3),
+                mint_b_vault: unique(4),
+                mint_a: unique(5),
+                mint_b: unique(6),
+            }),
+            vec![1, 2, 3],
+        ),
     ];
 
     for (accounts, writable_indexes) in cases {
@@ -721,8 +799,8 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
 
 #[test]
 fn market_id_try_from_covers_current_range() {
-    for id in 0..=23 {
+    for id in 0..=25 {
         assert_eq!(MarketId::try_from(id).unwrap().as_u8(), id);
     }
-    assert_eq!(MarketId::try_from(24), Err(BuildError::UnsupportedMarketId(24)));
+    assert_eq!(MarketId::try_from(26), Err(BuildError::UnsupportedMarketId(26)));
 }
