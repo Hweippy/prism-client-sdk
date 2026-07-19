@@ -627,6 +627,11 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 6      Prism program                      SDK constant
 ```
 
+To comply with BisonFi's account enforcement, the SDK automatically includes
+the Jito vote account `J1to1yufRnoWn81KYg1XkTWzmKjnYSnmE2VY8DGUJ9Qv`.
+Because Jito bundles reject transactions containing vote accounts, routes that
+include BisonFi cannot be submitted through Jito bundles.
+
 Only the pool's canonical mint A -> mint B direction is supported. Supply
 `BisonFiAccounts` only when the desired route consumes mint A and produces mint B;
 Prism does not scout or execute the reverse mint B -> mint A edge.
@@ -658,6 +663,10 @@ Account and pool layout errors:
 
 - `Custom(2000)` / `0x7d0` / `NotEnoughAccounts`: the account list is shorter than the declared market layouts require.
 - `Custom(2012)` / `0x7dc` / `UnsupportedBaseMint`: the submitted base mint is not WSOL, USDC, USDT, or USD1.
+- `Custom(2013)` / `0x7dd` / `InvalidRouteTokenAccount`: a submitted `route_mints[].user_ata` is missing, uninitialized, malformed, or owned by a different token program. Refresh it after closing/recreating the account, and supply its matching SPL Token or Token-2022 program.
+- `Custom(2014)` / `0x7de` / `InvalidSignerBaseTokenAccount`: the submitted base token account is missing, uninitialized, malformed, or has a different mint from `base.mint`.
+- `Custom(2015)` / `0x7df` / `InvalidFlashloanVaultAccount`: the canonical flashloan vault account is missing, uninitialized, malformed, or has a different mint from `base.mint`.
+- `Custom(2016)` / `0x7e0` / `DuplicateRouteMint`: two `route_mints` entries resolve to the same mint, or one resolves to `base.mint`.
 - `Custom(3000)` / `0xbb8` / `PoolOwnerMismatch`: a pool account is not owned by the expected DEX program, usually because the market variant does not match the pool.
 - `Custom(3001)` / `0xbb9` / `PoolDataSize`: a pool account is too short for the expected layout, or the supplied account is stale/wrong for that market.
 - `Custom(3003)` / `0xbbb` / `PoolMintMismatch`: a pool's endpoint mints do not match the submitted base mint and route mint set.
