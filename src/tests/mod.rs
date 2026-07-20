@@ -5,7 +5,7 @@ use crate::constants::SYSVAR_INSTRUCTIONS;
 use crate::*;
 use crate::markets::{
     alphaq::*, bisonfi::*, byreal::*, fusion::*, futarchy::*, goonfi::*, humidifi::*, manifest::*,
-    meteora::*, orca::*, pancakeswap::*, pumpfun::*, raydium::*, solfi::*, tessera::*,
+    meteora::*, orca::*, pancakeswap::*, pumpfun::*, raydium::*, solfi::*, tessera::*, zerofi::*,
     MarketAccounts, MarketId,
 };
 
@@ -263,6 +263,41 @@ fn bisonfi_emits_forward_swap_account_slice() {
             AccountMeta::new_readonly(BISONFI_TRAILING_ACCOUNT, false),
             AccountMeta::new_readonly(BISONFI, false),
             AccountMeta::new_readonly(PROGRAM_ID, false),
+        ]
+    );
+}
+
+#[test]
+fn zerofi_emits_swap_v4_account_slice() {
+    let accounts = ZeroFiAccounts {
+        pool: unique(1),
+        oracle: unique(2),
+        side_a: unique(3),
+        vault_a: unique(4),
+        side_b: unique(5),
+        vault_b: unique(6),
+        mint_a: unique(7),
+        mint_b: unique(8),
+    };
+    let market = MarketAccounts::ZeroFi(accounts);
+    let mut metas = Vec::new();
+    market.append_account_metas(&mut metas);
+
+    assert_eq!(market.market_id(), MarketId::ZeroFi);
+    assert_eq!(market.account_count(), 10);
+    assert_eq!(
+        metas,
+        vec![
+            AccountMeta::new(accounts.pool, false),
+            AccountMeta::new_readonly(accounts.oracle, false),
+            AccountMeta::new(accounts.side_a, false),
+            AccountMeta::new(accounts.vault_a, false),
+            AccountMeta::new(accounts.side_b, false),
+            AccountMeta::new(accounts.vault_b, false),
+            AccountMeta::new_readonly(accounts.mint_a, false),
+            AccountMeta::new_readonly(accounts.mint_b, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
+            AccountMeta::new_readonly(ZEROFI, false),
         ]
     );
 }
@@ -611,6 +646,19 @@ fn all_market_slices_have_expected_writable_orders() {
             }),
             vec![1, 2, 3],
         ),
+        (
+            MarketAccounts::ZeroFi(ZeroFiAccounts {
+                pool: unique(1),
+                oracle: unique(2),
+                side_a: unique(3),
+                vault_a: unique(4),
+                side_b: unique(5),
+                vault_b: unique(6),
+                mint_a: unique(7),
+                mint_b: unique(8),
+            }),
+            vec![0, 2, 3, 4, 5],
+        ),
     ];
 
     for (accounts, writable_indexes) in cases {
@@ -799,8 +847,8 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
 
 #[test]
 fn market_id_try_from_covers_current_range() {
-    for id in 0..=25 {
+    for id in 0..=26 {
         assert_eq!(MarketId::try_from(id).unwrap().as_u8(), id);
     }
-    assert_eq!(MarketId::try_from(26), Err(BuildError::UnsupportedMarketId(26)));
+    assert_eq!(MarketId::try_from(27), Err(BuildError::UnsupportedMarketId(27)));
 }

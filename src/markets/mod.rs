@@ -21,6 +21,7 @@ pub mod pumpfun;
 pub mod raydium;
 pub mod solfi;
 pub mod tessera;
+pub mod zerofi;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -51,6 +52,7 @@ pub enum MarketId {
     Fusion = 23,
     BisonFi = 24,
     Tessera = 25,
+    ZeroFi = 26,
 }
 
 impl MarketId {
@@ -86,6 +88,7 @@ impl MarketId {
             Self::Fusion => "Fusion",
             Self::BisonFi => "BisonFi",
             Self::Tessera => "Tessera",
+            Self::ZeroFi => "ZeroFi",
         }
     }
 }
@@ -121,6 +124,7 @@ impl TryFrom<u8> for MarketId {
             23 => Ok(Self::Fusion),
             24 => Ok(Self::BisonFi),
             25 => Ok(Self::Tessera),
+            26 => Ok(Self::ZeroFi),
             other => Err(BuildError::UnsupportedMarketId(other)),
         }
     }
@@ -155,6 +159,7 @@ pub enum MarketAccounts {
     Fusion(fusion::FusionAccounts),
     BisonFi(bisonfi::BisonFiAccounts),
     Tessera(tessera::TesseraAccounts),
+    ZeroFi(zerofi::ZeroFiAccounts),
 }
 
 impl MarketAccounts {
@@ -186,6 +191,7 @@ impl MarketAccounts {
             Self::Fusion(_) => MarketId::Fusion,
             Self::BisonFi(_) => MarketId::BisonFi,
             Self::Tessera(_) => MarketId::Tessera,
+            Self::ZeroFi(_) => MarketId::ZeroFi,
         }
     }
 
@@ -221,6 +227,7 @@ impl MarketAccounts {
             Self::Fusion(_) => 14,
             Self::BisonFi(_) => 7,
             Self::Tessera(_) => 8,
+            Self::ZeroFi(_) => 10,
         }
     }
 
@@ -252,6 +259,7 @@ impl MarketAccounts {
             Self::Fusion(accounts) => fusion::append(out, accounts),
             Self::BisonFi(accounts) => bisonfi::append(out, accounts),
             Self::Tessera(accounts) => tessera::append(out, accounts),
+            Self::ZeroFi(accounts) => zerofi::append(out, accounts),
         }
     }
 }
