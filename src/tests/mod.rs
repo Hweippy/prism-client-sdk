@@ -310,6 +310,8 @@ fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
         vault_b: unique(3),
         mint_a: unique(4),
         mint_b: unique(5),
+        token_program_a: SPL_TOKEN_2022,
+        token_program_b: SPL_TOKEN,
         side_price: unique(6),
         global_state: unique(7),
     };
@@ -330,8 +332,8 @@ fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
             AccountMeta::new_readonly(accounts.side_price, false),
             AccountMeta::new(accounts.global_state, false),
             AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
-            AccountMeta::new_readonly(SPL_TOKEN, false),
             AccountMeta::new_readonly(SPL_TOKEN_2022, false),
+            AccountMeta::new_readonly(SPL_TOKEN, false),
             AccountMeta::new_readonly(GOONFI_V2, false),
         ]
     );
@@ -625,6 +627,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 vault_b: unique(3),
                 mint_a: unique(4),
                 mint_b: unique(5),
+                token_program_a: SPL_TOKEN,
+                token_program_b: SPL_TOKEN,
                 side_price: unique(6),
                 global_state: unique(7),
             }),
@@ -637,6 +641,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 vault_b: unique(3),
                 mint_a: unique(4),
                 mint_b: unique(5),
+                token_program_a: SPL_TOKEN_2022,
+                token_program_b: SPL_TOKEN,
                 side_price: unique(6),
                 global_state: unique(7),
             }),
