@@ -26,26 +26,26 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 | DEX | Program ID |
 | --- | --- |
-| Raydium v4 | `675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8` |
-| Raydium CP | `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C` |
-| Raydium CLMM | `CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK` |
-| Whirlpool | `whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc` |
-| Meteora DLMM | `LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo` |
-| Meteora DAMM V2 | `cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG` |
-| Meteora Pools | `Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB` |
-| PumpfunAmm | `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` |
-| PancakeSwap | `HpNfyc2Saw7RKkQd8nEL4khUcuPhQ7WwY1B2qjx8jxFq` |
-| Byreal | `REALQqNEomY6cQGZJUGwywTBD2UmDT32rZcNnfxQ5N2` |
-| Humidifi | `9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp` |
-| Manifest | `MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms` |
-| AlphaQ | `ALPHAQmeA7bjrVuccPsYPiCvsi428SNwte66Srvs4pHA` |
-| GoonFi v2 (SPL Token / Token-2022) | `goonuddtQRrWqqn5nFyczVKaie28f3kDkHWkHtURSLE` |
-| SolFi v2 | `SV2EYYJyRz2YhfXwXnhNAevDEui5Q6yrfyo13WtupPF` |
-| Futarchy | `FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq` |
-| Fusion | `fUSioN9YKKSa3CUC2YUc4tPkHJ5Y6XW1yz8y6F7qWz9` |
-| BisonFi | `BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi` |
-| Tessera | `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH` |
-| ZeroFi | `ZERor4xhbUycZ6gb9ntrhqscUcZmAbQDjEAtCf4hbZY` |
+| [Raydium v4](#raydium-v4) | [`675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8`](https://solscan.io/account/675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8) |
+| [Raydium CP](#raydium-cp) | [`CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C`](https://solscan.io/account/CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C) |
+| [Raydium CLMM](#clmm-base) | [`CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK`](https://solscan.io/account/CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK) |
+| [Whirlpool](#orca-whirlpool) | [`whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc`](https://solscan.io/account/whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc) |
+| [Meteora DLMM](#meteora-dlmm) | [`LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo`](https://solscan.io/account/LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo) |
+| [Meteora DAMM V2](#meteora-damm-v2) | [`cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG`](https://solscan.io/account/cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG) |
+| [Meteora Pools](#meteora-pools) | [`Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB`](https://solscan.io/account/Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB) |
+| [PumpfunAmm](#pumpfun-amm) | [`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`](https://solscan.io/account/pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA) |
+| [PancakeSwap](#clmm-base) | [`HpNfyc2Saw7RKkQd8nEL4khUcuPhQ7WwY1B2qjx8jxFq`](https://solscan.io/account/HpNfyc2Saw7RKkQd8nEL4khUcuPhQ7WwY1B2qjx8jxFq) |
+| [Byreal](#clmm-base) | [`REALQqNEomY6cQGZJUGwywTBD2UmDT32rZcNnfxQ5N2`](https://solscan.io/account/REALQqNEomY6cQGZJUGwywTBD2UmDT32rZcNnfxQ5N2) |
+| [Humidifi](#humidifi-swap-v2) | [`9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp`](https://solscan.io/account/9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp) |
+| [Manifest](#manifest) | [`MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms`](https://solscan.io/account/MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms) |
+| [AlphaQ](#alphaq) | [`ALPHAQmeA7bjrVuccPsYPiCvsi428SNwte66Srvs4pHA`](https://solscan.io/account/ALPHAQmeA7bjrVuccPsYPiCvsi428SNwte66Srvs4pHA) |
+| [GoonFi v2 (SPL Token / Token-2022)](#goonfi-v2) | [`goonuddtQRrWqqn5nFyczVKaie28f3kDkHWkHtURSLE`](https://solscan.io/account/goonuddtQRrWqqn5nFyczVKaie28f3kDkHWkHtURSLE) |
+| [SolFi v2](#solfi-v2) | [`SV2EYYJyRz2YhfXwXnhNAevDEui5Q6yrfyo13WtupPF`](https://solscan.io/account/SV2EYYJyRz2YhfXwXnhNAevDEui5Q6yrfyo13WtupPF) |
+| [Futarchy](#futarchy-spot) | [`FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq`](https://solscan.io/account/FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq) |
+| [Fusion](#fusion) | [`fUSioN9YKKSa3CUC2YUc4tPkHJ5Y6XW1yz8y6F7qWz9`](https://solscan.io/account/fUSioN9YKKSa3CUC2YUc4tPkHJ5Y6XW1yz8y6F7qWz9) |
+| [BisonFi](#bisonfi) | [`BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi`](https://solscan.io/account/BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi) |
+| [Tessera](#tessera) | [`TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH`](https://solscan.io/account/TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH) |
+| [ZeroFi](#zerofi) | [`ZERor4xhbUycZ6gb9ntrhqscUcZmAbQDjEAtCf4hbZY`](https://solscan.io/account/ZERor4xhbUycZ6gb9ntrhqscUcZmAbQDjEAtCf4hbZY) |
 
 ## Route Shape
 
