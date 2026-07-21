@@ -1,7 +1,7 @@
 use solana_instruction::AccountMeta;
 use solana_pubkey::Pubkey;
 
-use crate::constants::SYSVAR_INSTRUCTIONS;
+use crate::constants::{SPL_TOKEN_2022, SYSVAR_INSTRUCTIONS};
 use crate::*;
 use crate::markets::{
     alphaq::*, bisonfi::*, byreal::*, fusion::*, futarchy::*, goonfi::*, humidifi::*, manifest::*,
@@ -303,6 +303,41 @@ fn zerofi_emits_swap_v4_account_slice() {
 }
 
 #[test]
+fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
+    let accounts = GoonfiV2Accounts {
+        pair: unique(1),
+        vault_a: unique(2),
+        vault_b: unique(3),
+        mint_a: unique(4),
+        mint_b: unique(5),
+        side_price: unique(6),
+        global_state: unique(7),
+    };
+    let market = MarketAccounts::GoonfiV2T22(accounts);
+    let mut metas = Vec::new();
+    market.append_account_metas(&mut metas);
+
+    assert_eq!(market.market_id(), MarketId::GoonfiV2T22);
+    assert_eq!(market.account_count(), 11);
+    assert_eq!(
+        metas,
+        vec![
+            AccountMeta::new(accounts.pair, false),
+            AccountMeta::new(accounts.vault_a, false),
+            AccountMeta::new(accounts.vault_b, false),
+            AccountMeta::new_readonly(accounts.mint_a, false),
+            AccountMeta::new_readonly(accounts.mint_b, false),
+            AccountMeta::new_readonly(accounts.side_price, false),
+            AccountMeta::new(accounts.global_state, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
+            AccountMeta::new_readonly(SPL_TOKEN, false),
+            AccountMeta::new_readonly(SPL_TOKEN_2022, false),
+            AccountMeta::new_readonly(GOONFI_V2, false),
+        ]
+    );
+}
+
+#[test]
 fn all_market_slices_have_expected_writable_orders() {
     let cases = vec![
         (
@@ -596,6 +631,18 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![0, 1, 2, 6],
         ),
         (
+            MarketAccounts::GoonfiV2T22(GoonfiV2Accounts {
+                pair: unique(1),
+                vault_a: unique(2),
+                vault_b: unique(3),
+                mint_a: unique(4),
+                mint_b: unique(5),
+                side_price: unique(6),
+                global_state: unique(7),
+            }),
+            vec![0, 1, 2, 6],
+        ),
+        (
             MarketAccounts::SolfiV2(SolfiV2Accounts {
                 pair: unique(1),
                 oracle: unique(2),
@@ -851,4 +898,6 @@ fn market_id_try_from_covers_current_range() {
         assert_eq!(MarketId::try_from(id).unwrap().as_u8(), id);
     }
     assert_eq!(MarketId::try_from(27), Err(BuildError::UnsupportedMarketId(27)));
+    assert_eq!(MarketId::try_from(28).unwrap(), MarketId::GoonfiV2T22);
+    assert_eq!(MarketId::try_from(29), Err(BuildError::UnsupportedMarketId(29)));
 }

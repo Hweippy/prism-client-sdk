@@ -39,12 +39,13 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 | Humidifi | `9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp` |
 | Manifest | `MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms` |
 | AlphaQ | `ALPHAQmeA7bjrVuccPsYPiCvsi428SNwte66Srvs4pHA` |
-| Goonfi v2 | `goonuddtQRrWqqn5nFyczVKaie28f3kDkHWkHtURSLE` |
+| GoonFi v2 (SPL Token / Token-2022) | `goonuddtQRrWqqn5nFyczVKaie28f3kDkHWkHtURSLE` |
 | SolFi v2 | `SV2EYYJyRz2YhfXwXnhNAevDEui5Q6yrfyo13WtupPF` |
 | Futarchy | `FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq` |
 | Fusion | `fUSioN9YKKSa3CUC2YUc4tPkHJ5Y6XW1yz8y6F7qWz9` |
 | BisonFi | `BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi` |
 | Tessera | `TessVdML9pBGgG9yGks7o4HewRaXVAMuoVj4x83GLQH` |
+| ZeroFi | `ZERor4xhbUycZ6gb9ntrhqscUcZmAbQDjEAtCf4hbZY` |
 
 ## Route Shape
 
@@ -239,6 +240,8 @@ user ATA                 writable
 23 Fusion
 24 BisonFi
 25 Tessera
+26 ZeroFi
+28 GoonfiV2T22
 ```
 
 ## Market Accounts
@@ -568,6 +571,37 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 7      instructions sysvar                SDK constant
 8      SPL Token program                  SDK constant
 9      GoonFi v2 program                  SDK constant
+```
+
+### GoonFi v2 Token-2022
+
+```text
+0  W   pair                               caller
+1  W   vault_a                            caller
+2  W   vault_b                            caller
+3      mint_a                             caller
+4      mint_b                             caller
+5      side_price                         caller
+6  W   global_state                       caller
+7      instructions sysvar                SDK constant
+8      SPL Token program                  SDK constant
+9      Token-2022 program                 SDK constant
+10     GoonFi v2 program                  SDK constant
+```
+
+### ZeroFi
+
+```text
+0  W   pool                               caller
+1      oracle                             caller
+2  W   side_a                             caller
+3  W   vault_a                            caller
+4  W   side_b                             caller
+5  W   vault_b                            caller
+6      mint_a                             caller
+7      mint_b                             caller
+8      instructions sysvar                SDK constant
+9      ZeroFi program                     SDK constant
 ```
 
 ### SolFi v2

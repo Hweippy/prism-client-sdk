@@ -53,6 +53,7 @@ pub enum MarketId {
     BisonFi = 24,
     Tessera = 25,
     ZeroFi = 26,
+    GoonfiV2T22 = 28,
 }
 
 impl MarketId {
@@ -89,6 +90,7 @@ impl MarketId {
             Self::BisonFi => "BisonFi",
             Self::Tessera => "Tessera",
             Self::ZeroFi => "ZeroFi",
+            Self::GoonfiV2T22 => "GoonfiV2T22",
         }
     }
 }
@@ -125,6 +127,7 @@ impl TryFrom<u8> for MarketId {
             24 => Ok(Self::BisonFi),
             25 => Ok(Self::Tessera),
             26 => Ok(Self::ZeroFi),
+            28 => Ok(Self::GoonfiV2T22),
             other => Err(BuildError::UnsupportedMarketId(other)),
         }
     }
@@ -160,6 +163,7 @@ pub enum MarketAccounts {
     BisonFi(bisonfi::BisonFiAccounts),
     Tessera(tessera::TesseraAccounts),
     ZeroFi(zerofi::ZeroFiAccounts),
+    GoonfiV2T22(goonfi::GoonfiV2Accounts),
 }
 
 impl MarketAccounts {
@@ -192,6 +196,7 @@ impl MarketAccounts {
             Self::BisonFi(_) => MarketId::BisonFi,
             Self::Tessera(_) => MarketId::Tessera,
             Self::ZeroFi(_) => MarketId::ZeroFi,
+            Self::GoonfiV2T22(_) => MarketId::GoonfiV2T22,
         }
     }
 
@@ -228,6 +233,7 @@ impl MarketAccounts {
             Self::BisonFi(_) => 7,
             Self::Tessera(_) => 8,
             Self::ZeroFi(_) => 10,
+            Self::GoonfiV2T22(_) => 11,
         }
     }
 
@@ -260,6 +266,7 @@ impl MarketAccounts {
             Self::BisonFi(accounts) => bisonfi::append(out, accounts),
             Self::Tessera(accounts) => tessera::append(out, accounts),
             Self::ZeroFi(accounts) => zerofi::append(out, accounts),
+            Self::GoonfiV2T22(accounts) => goonfi::append_v2_t22(out, accounts),
         }
     }
 }
