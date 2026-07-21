@@ -70,6 +70,7 @@ use prism_client_sdk::{
 use solana_pubkey::Pubkey;
 
 const WSOL_MINT: Pubkey = Pubkey::from_str_const("So11111111111111111111111111111111111111112");
+const USDC_MINT: Pubkey = Pubkey::from_str_const("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const SPL_TOKEN: Pubkey = Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 let ix = build_find_arb_v2_instruction(FindArbV2Params {
@@ -84,24 +85,24 @@ let ix = build_find_arb_v2_instruction(FindArbV2Params {
     min_profit_base_units: 10_000,
     max_dynamic_walk_steps: 20,
     route_mints: vec![MintAccount {
-        mint: token_mint,
+        mint: USDC_MINT,
         token_program: SPL_TOKEN,
-        user_ata: token_user_ata,
+        user_ata: usdc_user_ata,
     }],
     pools: vec![
         MarketAccounts::RaydiumV4(RaydiumV4Accounts {
-            pool_state: raydium_pool_state,
-            coin_vault: raydium_coin_vault,
-            pc_vault: raydium_pc_vault,
+            pool_state: Pubkey::from_str_const("58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"),
+            coin_vault: Pubkey::from_str_const("DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz"),
+            pc_vault: Pubkey::from_str_const("HLmqeL62xR1QoZ1HKKbXRrdN1p3phKpxRMb2VVopvBBz"),
         }),
         MarketAccounts::RaydiumCp(RaydiumCpAccounts {
-            pool_state: raydium_cp_pool_state,
-            amm_config: raydium_cp_amm_config,
-            token_0_vault: raydium_cp_token_0_vault,
-            token_1_vault: raydium_cp_token_1_vault,
+            pool_state: Pubkey::from_str_const("47hq28mcL7q5GhBg7epyGF2dnuJd4MKFt8QhT7CzYUp4"),
+            amm_config: Pubkey::from_str_const("BgxH5ifebqHDuiADWKhLjXGP5hWZeZLoCdmeWJLkRqLP"),
+            token_0_vault: Pubkey::from_str_const("9tAoQUNB1wKnBSUyc6ukg2pWbeofZJVHxur2UaRBZNZc"),
+            token_1_vault: Pubkey::from_str_const("BArWLNarRzS7N1GCwBjNgVnC4866c8oJNRqhb5axf6y4"),
             token_0_mint: WSOL_MINT,
-            token_1_mint: token_mint,
-            observation_state: raydium_cp_observation_state,
+            token_1_mint: USDC_MINT,
+            observation_state: Pubkey::from_str_const("AwXcFysn5vntDyiGo9hXDhTMFSg2in7hxj8ED51oZgqo"),
         }),
     ],
 })?;
