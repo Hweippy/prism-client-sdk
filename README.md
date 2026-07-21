@@ -83,7 +83,7 @@ let ix = build_find_arb_v2_instruction(FindArbV2Params {
     flashloan: true,
     fail_if_no_profit: true,
     min_profit_base_units: 10_000,
-    max_dynamic_walk_steps: 20,
+    max_dynamic_walk_steps: 12,
     route_mints: vec![MintAccount {
         mint: USDC_MINT,
         token_program: SPL_TOKEN,
