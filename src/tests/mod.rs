@@ -46,6 +46,19 @@ fn params(pool: MarketAccounts) -> FindArbV2Params {
     }
 }
 
+fn alphaq_accounts(token_program_left: Pubkey, token_program_right: Pubkey) -> AlphaQAccounts {
+    AlphaQAccounts {
+        pool: unique(1),
+        market_stats: unique(2),
+        vault_left: unique(3),
+        vault_right: unique(4),
+        mint_left: unique(5),
+        mint_right: unique(6),
+        token_program_left,
+        token_program_right,
+    }
+}
+
 #[test]
 fn builds_find_arb_v2_header_and_prefix() {
     let ix = build_find_arb_v2_instruction(params(MarketAccounts::RaydiumV4(RaydiumV4Accounts {
@@ -73,6 +86,54 @@ fn builds_find_arb_v2_header_and_prefix() {
     assert_eq!(ix.accounts[10], AccountMeta::new(unique(2), false));
     assert_eq!(ix.accounts[11], AccountMeta::new(unique(3), false));
     assert_eq!(ix.accounts[12], AccountMeta::new_readonly(RAYDIUM_V4, false));
+}
+
+#[test]
+fn builder_automatically_selects_alphaq_token2022_wire_variant() {
+    let ix = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+        SPL_TOKEN_2022,
+        SPL_TOKEN,
+    ))))
+    .unwrap();
+
+    assert_eq!(ix.data[13], MarketId::AlphaQT22.as_u8());
+    assert_eq!(ix.accounts.len(), 8 + 10);
+}
+
+#[test]
+fn builder_rejects_unknown_market_token_program() {
+    let token_program = unique(99);
+    let err = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+        token_program,
+        SPL_TOKEN,
+    ))))
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BuildError::UnsupportedMarketTokenProgram {
+            market: "AlphaQ",
+            token_program,
+        }
+    );
+}
+
+#[test]
+fn builder_rejects_alphaq_token2022_on_right_side() {
+    let err = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+        SPL_TOKEN,
+        SPL_TOKEN_2022,
+    ))))
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BuildError::UnsupportedMarketTokenProgramPair {
+            market: "AlphaQ",
+            token_program_a: SPL_TOKEN,
+            token_program_b: SPL_TOKEN_2022,
+        }
+    );
 }
 
 #[test]
@@ -303,7 +364,7 @@ fn zerofi_emits_swap_v4_account_slice() {
 }
 
 #[test]
-fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
+fn goonfi_v2_automatically_emits_mixed_token_program_account_slice() {
     let accounts = GoonfiV2Accounts {
         pair: unique(1),
         vault_a: unique(2),
@@ -315,7 +376,7 @@ fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
         side_price: unique(6),
         global_state: unique(7),
     };
-    let market = MarketAccounts::GoonfiV2T22(accounts);
+    let market = MarketAccounts::GoonfiV2(accounts);
     let mut metas = Vec::new();
     market.append_account_metas(&mut metas);
 
@@ -337,6 +398,28 @@ fn goonfi_v2_t22_emits_mixed_token_program_account_slice() {
             AccountMeta::new_readonly(GOONFI_V2, false),
         ]
     );
+}
+
+#[test]
+#[allow(deprecated)]
+fn deprecated_goonfi_v2_t22_alias_preserves_wire_output() {
+    let accounts = GoonfiV2Accounts {
+        pair: unique(1),
+        vault_a: unique(2),
+        vault_b: unique(3),
+        mint_a: unique(4),
+        mint_b: unique(5),
+        token_program_a: SPL_TOKEN_2022,
+        token_program_b: SPL_TOKEN,
+        side_price: unique(6),
+        global_state: unique(7),
+    };
+
+    let automatic = build_find_arb_v2_instruction(params(MarketAccounts::GoonfiV2(accounts))).unwrap();
+    let legacy = build_find_arb_v2_instruction(params(MarketAccounts::GoonfiV2T22(accounts))).unwrap();
+
+    assert_eq!(legacy.data, automatic.data);
+    assert_eq!(legacy.accounts, automatic.accounts);
 }
 
 #[test]
@@ -369,6 +452,10 @@ fn all_market_slices_have_expected_writable_orders() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(10),
+                token_mint_1: unique(11),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: unique(8),
@@ -378,7 +465,11 @@ fn all_market_slices_have_expected_writable_orders() {
         ),
         (
             MarketAccounts::OrcaWhirlpool(OrcaWhirlpoolAccounts {
+                token_program_a: SPL_TOKEN,
+                token_program_b: SPL_TOKEN,
                 whirlpool: unique(1),
+                token_mint_a: unique(8),
+                token_mint_b: unique(9),
                 vault_a: unique(2),
                 vault_b: unique(3),
                 tick_array_prev: unique(4),
@@ -398,8 +489,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 token_y_mint: unique(6),
                 oracle: unique(7),
                 host_fee_in: Some(unique(8)),
-                token_x_program: unique(9),
-                token_y_program: unique(10),
+                token_x_program: SPL_TOKEN,
+                token_y_program: SPL_TOKEN,
                 bin_array_prev: unique(11),
                 bin_array_cur: unique(12),
                 bin_array_next: unique(13),
@@ -464,6 +555,10 @@ fn all_market_slices_have_expected_writable_orders() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(10),
+                token_mint_1: unique(11),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: unique(8),
@@ -472,7 +567,7 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![1, 2, 3, 4, 7, 8, 9, 10],
         ),
         (
-            MarketAccounts::MeteoraDlmmT22(MeteoraDlmmAccounts {
+            MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts {
                 lb_pair: unique(1),
                 bin_array_bitmap_ext: unique(2),
                 reserve_x: unique(3),
@@ -481,8 +576,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 token_y_mint: unique(6),
                 oracle: unique(7),
                 host_fee_in: Some(unique(8)),
-                token_x_program: unique(9),
-                token_y_program: unique(10),
+                token_x_program: SPL_TOKEN_2022,
+                token_y_program: SPL_TOKEN,
                 bin_array_prev: unique(11),
                 bin_array_cur: unique(12),
                 bin_array_next: unique(13),
@@ -490,7 +585,7 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![0, 1, 2, 3, 6, 7, 13, 14, 15],
         ),
         (
-            MarketAccounts::RaydiumClmmT22(RaydiumClmmT22Accounts {
+            MarketAccounts::RaydiumClmm(RaydiumClmmAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -498,6 +593,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN_2022,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: unique(10),
@@ -506,7 +603,7 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![1, 2, 3, 4, 11, 12, 13, 14],
         ),
         (
-            MarketAccounts::PancakeswapT22(PancakeswapT22Accounts {
+            MarketAccounts::Pancakeswap(PancakeswapAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -514,6 +611,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN_2022,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: unique(10),
@@ -522,9 +621,9 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![1, 2, 3, 4, 11, 12, 13, 14],
         ),
         (
-            MarketAccounts::OrcaWhirlpoolT22(OrcaWhirlpoolT22Accounts {
-                token_program_a: unique(1),
-                token_program_b: unique(2),
+            MarketAccounts::OrcaWhirlpool(OrcaWhirlpoolAccounts {
+                token_program_a: SPL_TOKEN_2022,
+                token_program_b: SPL_TOKEN,
                 whirlpool: unique(3),
                 token_mint_a: unique(4),
                 token_mint_b: unique(5),
@@ -544,6 +643,10 @@ fn all_market_slices_have_expected_writable_orders() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(10),
+                token_mint_1: unique(11),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: unique(8),
@@ -552,7 +655,7 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![1, 2, 3, 4, 7, 8, 9, 10],
         ),
         (
-            MarketAccounts::ByrealClmmT22(ByrealClmmT22Accounts {
+            MarketAccounts::ByrealClmm(ByrealClmmAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -560,6 +663,8 @@ fn all_market_slices_have_expected_writable_orders() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN_2022,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: unique(10),
@@ -606,17 +711,21 @@ fn all_market_slices_have_expected_writable_orders() {
                 vault_right: unique(4),
                 mint_left: unique(5),
                 mint_right: unique(6),
+                token_program_left: SPL_TOKEN,
+                token_program_right: SPL_TOKEN,
             }),
             vec![0, 1, 2, 3],
         ),
         (
-            MarketAccounts::AlphaQT22(AlphaQAccounts {
+            MarketAccounts::AlphaQ(AlphaQAccounts {
                 pool: unique(1),
                 market_stats: unique(2),
                 vault_left: unique(3),
                 vault_right: unique(4),
                 mint_left: unique(5),
                 mint_right: unique(6),
+                token_program_left: SPL_TOKEN_2022,
+                token_program_right: SPL_TOKEN,
             }),
             vec![0, 1, 2, 3],
         ),
@@ -635,7 +744,7 @@ fn all_market_slices_have_expected_writable_orders() {
             vec![0, 1, 2, 6],
         ),
         (
-            MarketAccounts::GoonfiV2T22(GoonfiV2Accounts {
+            MarketAccounts::GoonfiV2(GoonfiV2Accounts {
                 pair: unique(1),
                 vault_a: unique(2),
                 vault_b: unique(3),
@@ -800,6 +909,10 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(9),
+                token_mint_1: unique(10),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: RAYDIUM_CLMM,
@@ -809,7 +922,7 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
             RAYDIUM_CLMM,
         ),
         (
-            MarketAccounts::RaydiumClmmT22(RaydiumClmmT22Accounts {
+            MarketAccounts::RaydiumClmm(RaydiumClmmAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -817,6 +930,8 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN_2022,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: RAYDIUM_CLMM,
@@ -832,6 +947,10 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(9),
+                token_mint_1: unique(10),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: PANCAKESWAP,
@@ -841,7 +960,7 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
             PANCAKESWAP,
         ),
         (
-            MarketAccounts::PancakeswapT22(PancakeswapT22Accounts {
+            MarketAccounts::Pancakeswap(PancakeswapAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -849,6 +968,8 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN_2022,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: PANCAKESWAP,
@@ -864,6 +985,10 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 token_vault_0: unique(3),
                 token_vault_1: unique(4),
                 observation_state: unique(5),
+                token_mint_0: unique(9),
+                token_mint_1: unique(10),
+                token_program_0: SPL_TOKEN,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(6),
                 tick_array_prev: unique(7),
                 tick_array_cur: BYREAL_CLMM,
@@ -873,7 +998,7 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
             BYREAL_CLMM,
         ),
         (
-            MarketAccounts::ByrealClmmT22(ByrealClmmT22Accounts {
+            MarketAccounts::ByrealClmm(ByrealClmmAccounts {
                 pool_state: unique(1),
                 amm_config: unique(2),
                 token_vault_0: unique(3),
@@ -881,6 +1006,8 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
                 observation_state: unique(5),
                 token_mint_0: unique(6),
                 token_mint_1: unique(7),
+                token_program_0: SPL_TOKEN_2022,
+                token_program_1: SPL_TOKEN,
                 tick_array_bitmap_ext: unique(8),
                 tick_array_prev: unique(9),
                 tick_array_cur: BYREAL_CLMM,

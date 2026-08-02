@@ -145,16 +145,34 @@ pub enum MarketAccounts {
     MeteoraPools(meteora::MeteoraPoolsAccounts),
     PumpfunAmm(pumpfun::PumpfunAmmAccounts),
     Pancakeswap(pancakeswap::PancakeswapAccounts),
+    #[deprecated(
+        note = "use MeteoraDlmm; the SDK selects MeteoraDlmmT22 automatically from the token programs"
+    )]
     MeteoraDlmmT22(meteora::MeteoraDlmmAccounts),
+    #[deprecated(
+        note = "use RaydiumClmm; the SDK selects RaydiumClmmT22 automatically from the token programs"
+    )]
     RaydiumClmmT22(raydium::RaydiumClmmT22Accounts),
+    #[deprecated(
+        note = "use Pancakeswap; the SDK selects PancakeswapT22 automatically from the token programs"
+    )]
     PancakeswapT22(pancakeswap::PancakeswapT22Accounts),
+    #[deprecated(
+        note = "use OrcaWhirlpool; the SDK selects OrcaWhirlpoolT22 automatically from the token programs"
+    )]
     OrcaWhirlpoolT22(orca::OrcaWhirlpoolT22Accounts),
     ByrealClmm(byreal::ByrealClmmAccounts),
+    #[deprecated(
+        note = "use ByrealClmm; the SDK selects ByrealClmmT22 automatically from the token programs"
+    )]
     ByrealClmmT22(byreal::ByrealClmmT22Accounts),
     HumidifiSwapV2(humidifi::HumidifiSwapV2Accounts),
     HumidifiSwap(humidifi::HumidifiSwapAccounts),
     Manifest(manifest::ManifestAccounts),
     AlphaQ(alphaq::AlphaQAccounts),
+    #[deprecated(
+        note = "use AlphaQ; the SDK selects AlphaQT22 automatically from the token programs"
+    )]
     AlphaQT22(alphaq::AlphaQAccounts),
     GoonfiV2(goonfi::GoonfiV2Accounts),
     SolfiV2(solfi::SolfiV2Accounts),
@@ -163,33 +181,142 @@ pub enum MarketAccounts {
     BisonFi(bisonfi::BisonFiAccounts),
     Tessera(tessera::TesseraAccounts),
     ZeroFi(zerofi::ZeroFiAccounts),
+    #[deprecated(
+        note = "use GoonfiV2; the SDK selects GoonfiV2T22 automatically from the token programs"
+    )]
     GoonfiV2T22(goonfi::GoonfiV2Accounts),
 }
 
+#[allow(deprecated)]
 impl MarketAccounts {
-    pub const fn market_id(self) -> MarketId {
+    pub fn market_id(self) -> MarketId {
+        self.inferred_market_id()
+    }
+
+    pub fn variant_name(self) -> &'static str {
+        self.market_id().name()
+    }
+
+    pub fn account_count(self) -> usize {
+        account_count_for_market(self.market_id())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_account_metas(self, out: &mut Vec<AccountMeta>) {
+        self.append_account_metas_for_market(out, self.market_id());
+    }
+
+    pub(crate) fn resolve(self) -> Result<ResolvedMarketAccounts, BuildError> {
+        let market_id = match self {
+            Self::RaydiumClmm(accounts) => paired_market_id(
+                "RaydiumClmm",
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::RaydiumClmm,
+                MarketId::RaydiumClmmT22,
+            )?,
+            Self::OrcaWhirlpool(accounts) => paired_market_id(
+                "OrcaWhirlpool",
+                accounts.token_program_a,
+                accounts.token_program_b,
+                MarketId::OrcaWhirlpool,
+                MarketId::OrcaWhirlpoolT22,
+            )?,
+            Self::MeteoraDlmm(accounts) => paired_market_id(
+                "MeteoraDlmm",
+                accounts.token_x_program,
+                accounts.token_y_program,
+                MarketId::MeteoraDlmm,
+                MarketId::MeteoraDlmmT22,
+            )?,
+            Self::Pancakeswap(accounts) => paired_market_id(
+                "Pancakeswap",
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::Pancakeswap,
+                MarketId::PancakeswapT22,
+            )?,
+            Self::ByrealClmm(accounts) => paired_market_id(
+                "ByrealClmm",
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::ByrealClmm,
+                MarketId::ByrealClmmT22,
+            )?,
+            Self::AlphaQ(accounts) => {
+                alphaq_market_id(accounts.token_program_left, accounts.token_program_right)?
+            }
+            Self::GoonfiV2(accounts) => paired_market_id(
+                "GoonfiV2",
+                accounts.token_program_a,
+                accounts.token_program_b,
+                MarketId::GoonfiV2,
+                MarketId::GoonfiV2T22,
+            )?,
+            _ => self.inferred_market_id(),
+        };
+        Ok(ResolvedMarketAccounts { accounts: self, market_id })
+    }
+
+    fn inferred_market_id(self) -> MarketId {
         match self {
             Self::RaydiumV4(_) => MarketId::RaydiumV4,
             Self::RaydiumCp(_) => MarketId::RaydiumCp,
-            Self::RaydiumClmm(_) => MarketId::RaydiumClmm,
-            Self::OrcaWhirlpool(_) => MarketId::OrcaWhirlpool,
-            Self::MeteoraDlmm(_) => MarketId::MeteoraDlmm,
+            Self::RaydiumClmm(accounts) => auto_market_id(
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::RaydiumClmm,
+                MarketId::RaydiumClmmT22,
+            ),
+            Self::OrcaWhirlpool(accounts) => auto_market_id(
+                accounts.token_program_a,
+                accounts.token_program_b,
+                MarketId::OrcaWhirlpool,
+                MarketId::OrcaWhirlpoolT22,
+            ),
+            Self::MeteoraDlmm(accounts) => auto_market_id(
+                accounts.token_x_program,
+                accounts.token_y_program,
+                MarketId::MeteoraDlmm,
+                MarketId::MeteoraDlmmT22,
+            ),
             Self::MeteoraDammV2(_) => MarketId::MeteoraDammV2,
             Self::MeteoraPools(_) => MarketId::MeteoraPools,
             Self::PumpfunAmm(_) => MarketId::PumpfunAmm,
-            Self::Pancakeswap(_) => MarketId::Pancakeswap,
+            Self::Pancakeswap(accounts) => auto_market_id(
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::Pancakeswap,
+                MarketId::PancakeswapT22,
+            ),
             Self::MeteoraDlmmT22(_) => MarketId::MeteoraDlmmT22,
             Self::RaydiumClmmT22(_) => MarketId::RaydiumClmmT22,
             Self::PancakeswapT22(_) => MarketId::PancakeswapT22,
             Self::OrcaWhirlpoolT22(_) => MarketId::OrcaWhirlpoolT22,
-            Self::ByrealClmm(_) => MarketId::ByrealClmm,
+            Self::ByrealClmm(accounts) => auto_market_id(
+                accounts.token_program_0,
+                accounts.token_program_1,
+                MarketId::ByrealClmm,
+                MarketId::ByrealClmmT22,
+            ),
             Self::ByrealClmmT22(_) => MarketId::ByrealClmmT22,
             Self::HumidifiSwapV2(_) => MarketId::HumidifiSwapV2,
             Self::HumidifiSwap(_) => MarketId::HumidifiSwap,
             Self::Manifest(_) => MarketId::Manifest,
-            Self::AlphaQ(_) => MarketId::AlphaQ,
+            Self::AlphaQ(accounts) => {
+                if accounts.token_program_left == SPL_TOKEN_2022 && accounts.token_program_right == SPL_TOKEN {
+                    MarketId::AlphaQT22
+                } else {
+                    MarketId::AlphaQ
+                }
+            }
             Self::AlphaQT22(_) => MarketId::AlphaQT22,
-            Self::GoonfiV2(_) => MarketId::GoonfiV2,
+            Self::GoonfiV2(accounts) => auto_market_id(
+                accounts.token_program_a,
+                accounts.token_program_b,
+                MarketId::GoonfiV2,
+                MarketId::GoonfiV2T22,
+            ),
             Self::SolfiV2(_) => MarketId::SolfiV2,
             Self::FutarchySpot(_) => MarketId::FutarchySpot,
             Self::Fusion(_) => MarketId::Fusion,
@@ -200,66 +327,61 @@ impl MarketAccounts {
         }
     }
 
-    pub const fn variant_name(self) -> &'static str {
-        self.market_id().name()
-    }
-
-    pub const fn account_count(self) -> usize {
-        match self {
-            Self::RaydiumV4(_) => 5,
-            Self::RaydiumCp(_) => 9,
-            Self::RaydiumClmm(_) => 11,
-            Self::OrcaWhirlpool(_) => 9,
-            Self::MeteoraDlmm(_) => 15,
-            Self::MeteoraDammV2(_) => 11,
-            Self::MeteoraPools(_) => 14,
-            Self::PumpfunAmm(_) => 24,
-            Self::Pancakeswap(_) => 11,
-            Self::MeteoraDlmmT22(_) => 16,
-            Self::RaydiumClmmT22(_) => 15,
-            Self::PancakeswapT22(_) => 15,
-            Self::OrcaWhirlpoolT22(_) => 13,
-            Self::ByrealClmm(_) => 11,
-            Self::ByrealClmmT22(_) => 15,
-            Self::HumidifiSwapV2(_) => 10,
-            Self::HumidifiSwap(_) => 7,
-            Self::Manifest(_) => 7,
-            Self::AlphaQ(_) => 9,
-            Self::AlphaQT22(_) => 10,
-            Self::GoonfiV2(_) => 10,
-            Self::SolfiV2(_) => 11,
-            Self::FutarchySpot(_) => 5,
-            Self::Fusion(_) => 14,
-            Self::BisonFi(_) => 7,
-            Self::Tessera(_) => 8,
-            Self::ZeroFi(_) => 10,
-            Self::GoonfiV2T22(_) => 11,
-        }
-    }
-
-    pub(crate) fn append_account_metas(self, out: &mut Vec<AccountMeta>) {
+    fn append_account_metas_for_market(self, out: &mut Vec<AccountMeta>, market_id: MarketId) {
         match self {
             Self::RaydiumV4(accounts) => raydium::append_v4(out, accounts),
             Self::RaydiumCp(accounts) => raydium::append_cp(out, accounts),
-            Self::RaydiumClmm(accounts) => raydium::append_clmm(out, accounts),
-            Self::OrcaWhirlpool(accounts) => orca::append_whirlpool(out, accounts),
-            Self::MeteoraDlmm(accounts) => meteora::append_dlmm(out, accounts, false),
+            Self::RaydiumClmm(accounts) => {
+                if market_id == MarketId::RaydiumClmmT22 {
+                    raydium::append_clmm_t22_auto(out, accounts);
+                } else {
+                    raydium::append_clmm(out, accounts);
+                }
+            }
+            Self::OrcaWhirlpool(accounts) => {
+                if market_id == MarketId::OrcaWhirlpoolT22 {
+                    orca::append_whirlpool_t22_auto(out, accounts);
+                } else {
+                    orca::append_whirlpool(out, accounts);
+                }
+            }
+            Self::MeteoraDlmm(accounts) => {
+                meteora::append_dlmm(out, accounts, market_id == MarketId::MeteoraDlmmT22);
+            }
             Self::MeteoraDammV2(accounts) => meteora::append_damm_v2(out, accounts),
             Self::MeteoraPools(accounts) => meteora::append_pools(out, accounts),
             Self::PumpfunAmm(accounts) => pumpfun::append_amm(out, accounts),
-            Self::Pancakeswap(accounts) => pancakeswap::append(out, accounts),
+            Self::Pancakeswap(accounts) => {
+                if market_id == MarketId::PancakeswapT22 {
+                    pancakeswap::append_t22_auto(out, accounts);
+                } else {
+                    pancakeswap::append(out, accounts);
+                }
+            }
             Self::MeteoraDlmmT22(accounts) => meteora::append_dlmm(out, accounts, true),
             Self::RaydiumClmmT22(accounts) => raydium::append_clmm_t22(out, accounts),
             Self::PancakeswapT22(accounts) => pancakeswap::append_t22(out, accounts),
             Self::OrcaWhirlpoolT22(accounts) => orca::append_whirlpool_t22(out, accounts),
-            Self::ByrealClmm(accounts) => byreal::append_clmm(out, accounts),
+            Self::ByrealClmm(accounts) => {
+                if market_id == MarketId::ByrealClmmT22 {
+                    byreal::append_clmm_t22_auto(out, accounts);
+                } else {
+                    byreal::append_clmm(out, accounts);
+                }
+            }
             Self::ByrealClmmT22(accounts) => byreal::append_clmm_t22(out, accounts),
             Self::HumidifiSwapV2(accounts) => humidifi::append_swap_v2(out, accounts),
             Self::HumidifiSwap(accounts) => humidifi::append_swap(out, accounts),
             Self::Manifest(accounts) => manifest::append(out, accounts),
-            Self::AlphaQ(accounts) => alphaq::append(out, accounts, false),
+            Self::AlphaQ(accounts) => alphaq::append(out, accounts, market_id == MarketId::AlphaQT22),
             Self::AlphaQT22(accounts) => alphaq::append(out, accounts, true),
-            Self::GoonfiV2(accounts) => goonfi::append_v2(out, accounts),
+            Self::GoonfiV2(accounts) => {
+                if market_id == MarketId::GoonfiV2T22 {
+                    goonfi::append_v2_t22(out, accounts);
+                } else {
+                    goonfi::append_v2(out, accounts);
+                }
+            }
             Self::SolfiV2(accounts) => solfi::append_v2(out, accounts),
             Self::FutarchySpot(accounts) => futarchy::append_spot(out, accounts),
             Self::Fusion(accounts) => fusion::append(out, accounts),
@@ -268,6 +390,101 @@ impl MarketAccounts {
             Self::ZeroFi(accounts) => zerofi::append(out, accounts),
             Self::GoonfiV2T22(accounts) => goonfi::append_v2_t22(out, accounts),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResolvedMarketAccounts {
+    accounts: MarketAccounts,
+    market_id: MarketId,
+}
+
+impl ResolvedMarketAccounts {
+    pub(crate) const fn market_id(self) -> MarketId {
+        self.market_id
+    }
+
+    pub(crate) fn account_count(self) -> usize {
+        account_count_for_market(self.market_id)
+    }
+
+    pub(crate) fn append_account_metas(self, out: &mut Vec<AccountMeta>) {
+        self.accounts.append_account_metas_for_market(out, self.market_id);
+    }
+}
+
+fn account_count_for_market(market_id: MarketId) -> usize {
+    match market_id {
+        MarketId::RaydiumV4 => 5,
+        MarketId::RaydiumCp => 9,
+        MarketId::RaydiumClmm => 11,
+        MarketId::OrcaWhirlpool => 9,
+        MarketId::MeteoraDlmm => 15,
+        MarketId::MeteoraDammV2 => 11,
+        MarketId::MeteoraPools => 14,
+        MarketId::PumpfunAmm => 24,
+        MarketId::Pancakeswap => 11,
+        MarketId::MeteoraDlmmT22 => 16,
+        MarketId::RaydiumClmmT22 => 15,
+        MarketId::PancakeswapT22 => 15,
+        MarketId::OrcaWhirlpoolT22 => 13,
+        MarketId::ByrealClmm => 11,
+        MarketId::ByrealClmmT22 => 15,
+        MarketId::HumidifiSwapV2 => 10,
+        MarketId::HumidifiSwap => 7,
+        MarketId::Manifest => 7,
+        MarketId::AlphaQ => 9,
+        MarketId::AlphaQT22 => 10,
+        MarketId::GoonfiV2 => 10,
+        MarketId::SolfiV2 => 11,
+        MarketId::FutarchySpot => 5,
+        MarketId::Fusion => 14,
+        MarketId::BisonFi => 7,
+        MarketId::Tessera => 8,
+        MarketId::ZeroFi => 10,
+        MarketId::GoonfiV2T22 => 11,
+    }
+}
+
+fn auto_market_id(program_a: Pubkey, program_b: Pubkey, spl: MarketId, t22: MarketId) -> MarketId {
+    if program_a == SPL_TOKEN_2022 || program_b == SPL_TOKEN_2022 {
+        t22
+    } else {
+        spl
+    }
+}
+
+fn paired_market_id(
+    market: &'static str,
+    program_a: Pubkey,
+    program_b: Pubkey,
+    spl: MarketId,
+    t22: MarketId,
+) -> Result<MarketId, BuildError> {
+    validate_token_program(market, program_a)?;
+    validate_token_program(market, program_b)?;
+    Ok(auto_market_id(program_a, program_b, spl, t22))
+}
+
+fn alphaq_market_id(program_left: Pubkey, program_right: Pubkey) -> Result<MarketId, BuildError> {
+    validate_token_program("AlphaQ", program_left)?;
+    validate_token_program("AlphaQ", program_right)?;
+    match (program_left, program_right) {
+        (SPL_TOKEN, SPL_TOKEN) => Ok(MarketId::AlphaQ),
+        (SPL_TOKEN_2022, SPL_TOKEN) => Ok(MarketId::AlphaQT22),
+        _ => Err(BuildError::UnsupportedMarketTokenProgramPair {
+            market: "AlphaQ",
+            token_program_a: program_left,
+            token_program_b: program_right,
+        }),
+    }
+}
+
+fn validate_token_program(market: &'static str, token_program: Pubkey) -> Result<(), BuildError> {
+    if token_program == SPL_TOKEN || token_program == SPL_TOKEN_2022 {
+        Ok(())
+    } else {
+        Err(BuildError::UnsupportedMarketTokenProgram { market, token_program })
     }
 }
 

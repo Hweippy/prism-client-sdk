@@ -15,6 +15,8 @@ pub struct AlphaQAccounts {
     pub vault_right: Pubkey,
     pub mint_left: Pubkey,
     pub mint_right: Pubkey,
+    pub token_program_left: Pubkey,
+    pub token_program_right: Pubkey,
 }
 
 pub(super) fn append(out: &mut Vec<AccountMeta>, accounts: AlphaQAccounts, token_2022: bool) {

@@ -18,7 +18,7 @@ pub const FEE_ATA_USDT: Pubkey = Pubkey::from_str_const("9a76tENsmkTumYbA46r6FD9
 pub const FEE_ATA_USD1: Pubkey = Pubkey::from_str_const("Egv1XeHAL4LxU59jDgQm3Q7jeqAm5SSyq8xGjEdHDZzh");
 
 pub const SPL_TOKEN: Pubkey = Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-pub(crate) const SPL_TOKEN_2022: Pubkey = Pubkey::from_str_const("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+pub const SPL_TOKEN_2022: Pubkey = Pubkey::from_str_const("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 pub(crate) const SPL_MEMO: Pubkey = Pubkey::from_str_const("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 pub const SPL_ATA_PROGRAM: Pubkey = Pubkey::from_str_const("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 pub(crate) const SYSTEM_PROGRAM: Pubkey = Pubkey::from_str_const("11111111111111111111111111111111");

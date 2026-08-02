@@ -49,7 +49,7 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 ## Route Shape
 
-`find_arb_v2` supports 2-hop and constrained 3-hop arbitrage only. It does not build or execute routes with more than three swap legs.
+`find_arb_v2` supports up to 3-hop arbitrage. It does not build or execute routes with more than three swap legs.
 
 The `base` mint and `route_mints` fields have the same meaning for both shapes. `base` is the cycle's base token, and `route_mints` contains every non-base mint the submitted pool graph may touch. For a 2-hop route, that is usually one target mint. For a 3-hop route, include both non-base mints in the triangle.
 
@@ -245,11 +245,29 @@ user ATA                 writable
 28 GoonfiV2T22
 ```
 
+These are wire IDs understood by the on-chain program. Callers do not choose between the normal and `T22` IDs for paired market families. The SDK selects the wire ID and matching account slice from the token programs supplied in the normal family struct.
+
 ## Market Accounts
 
-Callers pass `FindArbV2Params { pools: Vec<MarketAccounts> }`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the market id from the enum variant, inserts Prism's fixed program ids, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
+Callers pass `FindArbV2Params { pools: Vec<MarketAccounts> }`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the wire market ID, inserts Prism's fixed program IDs, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
 
 There is no separate market id field to keep in sync with a raw pubkey slice. If the variant is `MarketAccounts::RaydiumV4`, the instruction data receives market id `0` and the Raydium v4 account layout is emitted.
+
+The following paired families use one caller-facing variant for SPL Token and Token-2022 pools:
+
+```text
+MarketAccounts::RaydiumClmm
+MarketAccounts::OrcaWhirlpool
+MarketAccounts::MeteoraDlmm
+MarketAccounts::Pancakeswap
+MarketAccounts::ByrealClmm
+MarketAccounts::AlphaQ
+MarketAccounts::GoonfiV2
+```
+
+Supply both endpoint mint addresses and their exact token program IDs in the account struct. If both programs are SPL Token, the SDK emits the normal wire ID and slice. If either program is Token-2022, it emits the `T22` wire ID and slice. AlphaQ is narrower: it supports SPL/SPL and Token-2022-left/SPL-right only. Unsupported program IDs and unsupported AlphaQ orientations return `BuildError`.
+
+This selection is deterministic and performs no RPC calls. The caller remains responsible for reading the mint owners or otherwise supplying the correct token program IDs. The explicit `MarketAccounts::*T22` variants remain temporarily available as deprecated compatibility aliases; new code should use the normal family variants above.
 
 Documented optional placeholders are represented as `Option<Pubkey>`:
 
@@ -272,9 +290,9 @@ PumpfunAmmAccounts.pool_v2
 
 CLMM current tick-array placeholder:
 
-`RaydiumClmm`, `RaydiumClmmT22`, `Pancakeswap`, `PancakeswapT22`, `ByrealClmm`, and `ByrealClmmT22` also accept the variant's DEX program id in `tick_array_cur`. Use this only after checking that the mathematical current tick-array PDA does not exist, or when another supplied tick-array slot intentionally carries the first valid tick array for the swap direction. `tick_array_prev` and `tick_array_next` must not be program-id placeholders; any slot Prism may use as the first CPI tick array must be a loadable tick-array account.
+`RaydiumClmm`, `Pancakeswap`, and `ByrealClmm` also accept the family's DEX program id in `tick_array_cur`. Use this only after checking that the mathematical current tick-array PDA does not exist, or when another supplied tick-array slot intentionally carries the first valid tick array for the swap direction. `tick_array_prev` and `tick_array_next` must not be program-id placeholders; any slot Prism may use as the first CPI tick array must be a loadable tick-array account.
 
-All other fields are required. The SDK does not invent dynamic pool accounts, derive user ATAs, infer token programs, choose tick arrays, check tick-array existence, or fetch state.
+All other fields are required. The SDK does not invent dynamic pool accounts, derive user ATAs, discover token programs, choose tick arrays, check tick-array existence, or fetch state. It only selects a wire layout from the token programs the caller supplied.
 
 ## Emitted Pool Slices
 
@@ -333,7 +351,7 @@ Used by `RaydiumClmm`, `Pancakeswap`, and `ByrealClmm`.
 
 ### CLMM Token-2022
 
-Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
+Automatically selected for `RaydiumClmm`, `Pancakeswap`, and `ByrealClmm` when either supplied endpoint token program is Token-2022.
 
 ```text
 0      amm_config                         caller
@@ -368,6 +386,8 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 ```
 
 ### Orca Whirlpool Token-2022
+
+Automatically selected for `OrcaWhirlpool` when either supplied endpoint token program is Token-2022.
 
 ```text
 0      token_program_a                    caller
@@ -406,6 +426,8 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 ```
 
 ### Meteora DLMM Token-2022
+
+Automatically selected for `MeteoraDlmm` when either supplied endpoint token program is Token-2022.
 
 ```text
 0  W   lb_pair                            caller
@@ -546,6 +568,8 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 
 ### AlphaQ Token-2022
 
+Automatically selected for `AlphaQ` when `token_program_left` is Token-2022 and `token_program_right` is SPL Token.
+
 ```text
 0  W   pool                               caller
 1  W   market_stats                       caller
@@ -575,6 +599,8 @@ Used by `RaydiumClmmT22`, `PancakeswapT22`, and `ByrealClmmT22`.
 ```
 
 ### GoonFi v2 Token-2022
+
+Automatically selected for `GoonfiV2` when either supplied endpoint token program is Token-2022.
 
 ```text
 0  W   pair                               caller
@@ -732,5 +758,7 @@ Arb outcome and execution errors:
 | `MissingPools` | `pools` is empty. | Add at least one `MarketAccounts` variant. The SDK does not infer pools from mints or route intent. |
 | `PoolCountOverflow(count)` | `pools.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |
 | `UnsupportedMarketId(byte)` | `markets::MarketId::try_from(byte)` received a byte outside the SDK's supported market id range. | This does not occur when building with typed `MarketAccounts` variants, because the variant supplies the market id. |
+| `UnsupportedMarketTokenProgram { market, token_program }` | A unified market struct contains a token program other than SPL Token or Token-2022. | Supply the actual owner program of each endpoint mint. |
+| `UnsupportedMarketTokenProgramPair { market, token_program_a, token_program_b }` | The individual programs are recognized, but that market does not support the orientation. | Currently this guards AlphaQ, which supports SPL/SPL and Token-2022-left/SPL-right only. |
 
 The SDK does not validate account existence, token account ownership, pool state, pool endpoint mints, route profitability, lookup table fit, compute budget, or transaction account-lock count. Those checks belong to the caller's indexer, simulator, transaction builder, or Prism itself.

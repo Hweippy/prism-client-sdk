@@ -12,6 +12,10 @@ pub struct ByrealClmmAccounts {
     pub token_vault_0: Pubkey,
     pub token_vault_1: Pubkey,
     pub observation_state: Pubkey,
+    pub token_mint_0: Pubkey,
+    pub token_mint_1: Pubkey,
+    pub token_program_0: Pubkey,
+    pub token_program_1: Pubkey,
     pub tick_array_bitmap_ext: Pubkey,
     pub tick_array_prev: Pubkey,
     /// May be the Byreal CLMM program id when the mathematical current
@@ -45,6 +49,24 @@ pub(super) fn append_clmm(out: &mut Vec<AccountMeta>, accounts: ByrealClmmAccoun
         accounts.token_vault_0,
         accounts.token_vault_1,
         accounts.observation_state,
+        BYREAL_CLMM,
+        accounts.tick_array_bitmap_ext,
+        accounts.tick_array_prev,
+        accounts.tick_array_cur,
+        accounts.tick_array_next,
+    );
+}
+
+pub(super) fn append_clmm_t22_auto(out: &mut Vec<AccountMeta>, accounts: ByrealClmmAccounts) {
+    append_clmm_t22_base(
+        out,
+        accounts.pool_state,
+        accounts.amm_config,
+        accounts.token_vault_0,
+        accounts.token_vault_1,
+        accounts.observation_state,
+        accounts.token_mint_0,
+        accounts.token_mint_1,
         BYREAL_CLMM,
         accounts.tick_array_bitmap_ext,
         accounts.tick_array_prev,

@@ -21,7 +21,8 @@ use crate::{
 
 pub use constants::{
     FEE_ATA_USD1, FEE_ATA_USDT, FEE_OWNER, FIND_ARB_V2_DISCRIMINATOR, PROGRAM_ID, SPL_ATA_PROGRAM,
-    SPL_TOKEN, USDC_MINT, USD1_MINT, USDT_MINT, VAULT_ATA_USDC, VAULT_ATA_WSOL, VAULT_AUTH, WSOL_MINT,
+    SPL_TOKEN, SPL_TOKEN_2022, USDC_MINT, USD1_MINT, USDT_MINT, VAULT_ATA_USDC, VAULT_ATA_WSOL,
+    VAULT_AUTH, WSOL_MINT,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +74,19 @@ pub enum BuildError {
     MissingPools,
     #[error("unsupported market id {0}")]
     UnsupportedMarketId(u8),
+    #[error("unsupported token program {token_program} for {market}")]
+    UnsupportedMarketTokenProgram {
+        market: &'static str,
+        token_program: Pubkey,
+    },
+    #[error(
+        "unsupported token-program pairing for {market}: left/a={token_program_a}, right/b={token_program_b}"
+    )]
+    UnsupportedMarketTokenProgramPair {
+        market: &'static str,
+        token_program_a: Pubkey,
+        token_program_b: Pubkey,
+    },
 }
 
 pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruction, BuildError> {
@@ -85,19 +99,25 @@ pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruct
         .map_err(|_| BuildError::RouteMintCountOverflow(params.route_mints.len()))?;
     let num_pools = u8::try_from(params.pools.len())
         .map_err(|_| BuildError::PoolCountOverflow(params.pools.len()))?;
+    let resolved_pools = params
+        .pools
+        .iter()
+        .copied()
+        .map(MarketAccounts::resolve)
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut data = Vec::with_capacity(13 + params.pools.len());
+    let mut data = Vec::with_capacity(13 + resolved_pools.len());
     data.push(FIND_ARB_V2_DISCRIMINATOR);
     data.push(flags(params.flashloan, params.fail_if_no_profit));
     data.push(params.max_dynamic_walk_steps);
     data.push(num_mints);
     data.push(num_pools);
     data.extend_from_slice(&params.min_profit_base_units.to_le_bytes());
-    for pool in &params.pools {
+    for pool in &resolved_pools {
         data.push(pool.market_id().as_u8());
     }
 
-    let pool_account_count: usize = params.pools.iter().map(|pool| pool.account_count()).sum();
+    let pool_account_count: usize = resolved_pools.iter().map(|pool| pool.account_count()).sum();
     let mut accounts = Vec::with_capacity(
         5 + usize::from(params.flashloan) + params.route_mints.len() * 2 + pool_account_count,
     );
@@ -118,7 +138,7 @@ pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruct
         accounts.push(AccountMeta::new(mint.user_ata, false));
     }
 
-    for pool in params.pools {
+    for pool in resolved_pools {
         pool.append_account_metas(&mut accounts);
     }
 
