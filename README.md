@@ -267,7 +267,9 @@ MarketAccounts::GoonfiV2
 
 Supply both endpoint mint addresses and their exact token program IDs in the account struct. If both programs are SPL Token, the SDK emits the normal wire ID and slice. If either program is Token-2022, it emits the `T22` wire ID and slice. AlphaQ is narrower: it supports SPL/SPL and Token-2022-left/SPL-right only. Unsupported program IDs and unsupported AlphaQ orientations return `BuildError`.
 
-This selection is deterministic and performs no RPC calls. The caller remains responsible for reading the mint owners or otherwise supplying the correct token program IDs. The explicit `MarketAccounts::*T22` variants remain temporarily available as deprecated compatibility aliases; new code should use the normal family variants above.
+This selection is deterministic and performs no RPC calls. The caller remains responsible for reading the mint owners or otherwise supplying the correct token program IDs. `MarketAccounts::try_market_id()` and `try_account_count()` expose the same checked resolution used by `build_find_arb_v2_instruction`; invalid token programs never produce a public wire ID or count.
+
+The explicit `MarketAccounts::*T22` variants remain temporarily available as deprecated compatibility aliases; new code should use the normal family variants above. Aliases that carry token-program fields validate them and reject an all-SPL selection. `AlphaQT22` specifically requires Token-2022-left/SPL-right. The legacy `RaydiumClmmT22Accounts`, `PancakeswapT22Accounts`, and `ByrealClmmT22Accounts` structs do not carry token-program fields, so those three aliases are the documented exception: they retain forced-T22 behavior that the SDK cannot validate from their inputs.
 
 Documented optional placeholders are represented as `Option<Pubkey>`:
 

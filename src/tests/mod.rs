@@ -1,7 +1,7 @@
 use solana_instruction::AccountMeta;
 use solana_pubkey::Pubkey;
 
-use crate::constants::{SPL_TOKEN_2022, SYSVAR_INSTRUCTIONS};
+use crate::constants::{SPL_MEMO, SPL_TOKEN_2022, SYSVAR_INSTRUCTIONS};
 use crate::*;
 use crate::markets::{
     alphaq::*, bisonfi::*, byreal::*, fusion::*, futarchy::*, goonfi::*, humidifi::*, manifest::*,
@@ -56,6 +56,108 @@ fn alphaq_accounts(token_program_left: Pubkey, token_program_right: Pubkey) -> A
         mint_right: unique(6),
         token_program_left,
         token_program_right,
+    }
+}
+
+fn raydium_clmm_accounts(token_program_0: Pubkey, token_program_1: Pubkey) -> RaydiumClmmAccounts {
+    RaydiumClmmAccounts {
+        pool_state: unique(1),
+        amm_config: unique(2),
+        token_vault_0: unique(3),
+        token_vault_1: unique(4),
+        observation_state: unique(5),
+        token_mint_0: unique(6),
+        token_mint_1: unique(7),
+        token_program_0,
+        token_program_1,
+        tick_array_bitmap_ext: unique(8),
+        tick_array_prev: unique(9),
+        tick_array_cur: unique(10),
+        tick_array_next: unique(11),
+    }
+}
+
+fn orca_accounts(token_program_a: Pubkey, token_program_b: Pubkey) -> OrcaWhirlpoolAccounts {
+    OrcaWhirlpoolAccounts {
+        token_program_a,
+        token_program_b,
+        whirlpool: unique(1),
+        token_mint_a: unique(2),
+        token_mint_b: unique(3),
+        vault_a: unique(4),
+        vault_b: unique(5),
+        tick_array_prev: unique(6),
+        tick_array_cur: unique(7),
+        tick_array_next: unique(8),
+        oracle: unique(9),
+    }
+}
+
+fn dlmm_accounts(token_x_program: Pubkey, token_y_program: Pubkey) -> MeteoraDlmmAccounts {
+    MeteoraDlmmAccounts {
+        lb_pair: unique(1),
+        bin_array_bitmap_ext: unique(2),
+        reserve_x: unique(3),
+        reserve_y: unique(4),
+        token_x_mint: unique(5),
+        token_y_mint: unique(6),
+        oracle: unique(7),
+        host_fee_in: None,
+        token_x_program,
+        token_y_program,
+        bin_array_prev: unique(8),
+        bin_array_cur: unique(9),
+        bin_array_next: unique(10),
+    }
+}
+
+fn pancakeswap_accounts(token_program_0: Pubkey, token_program_1: Pubkey) -> PancakeswapAccounts {
+    PancakeswapAccounts {
+        pool_state: unique(1),
+        amm_config: unique(2),
+        token_vault_0: unique(3),
+        token_vault_1: unique(4),
+        observation_state: unique(5),
+        token_mint_0: unique(6),
+        token_mint_1: unique(7),
+        token_program_0,
+        token_program_1,
+        tick_array_bitmap_ext: unique(8),
+        tick_array_prev: unique(9),
+        tick_array_cur: unique(10),
+        tick_array_next: unique(11),
+    }
+}
+
+fn byreal_accounts(token_program_0: Pubkey, token_program_1: Pubkey) -> ByrealClmmAccounts {
+    ByrealClmmAccounts {
+        pool_state: unique(1),
+        amm_config: unique(2),
+        token_vault_0: unique(3),
+        token_vault_1: unique(4),
+        observation_state: unique(5),
+        token_mint_0: unique(6),
+        token_mint_1: unique(7),
+        token_program_0,
+        token_program_1,
+        tick_array_bitmap_ext: unique(8),
+        tick_array_prev: unique(9),
+        tick_array_cur: unique(10),
+        tick_array_next: unique(11),
+    }
+}
+
+fn goonfi_accounts(token_program_a: Pubkey, token_program_b: Pubkey) -> GoonfiV2Accounts {
+    GoonfiV2Accounts {
+        pair: unique(1),
+        vault_a: unique(2),
+        vault_b: unique(3),
+        mint_a: unique(4),
+        mint_b: unique(5),
+        token_program_a,
+        token_program_b,
+        side_price: unique(6),
+        global_state: unique(7),
     }
 }
 
@@ -134,6 +236,145 @@ fn builder_rejects_alphaq_token2022_on_right_side() {
             token_program_b: SPL_TOKEN_2022,
         }
     );
+}
+
+#[test]
+fn builder_resolves_unified_market_ids_counts_and_program_order() {
+    let cases = vec![
+        (
+            "RaydiumClmm SPL",
+            MarketAccounts::RaydiumClmm(raydium_clmm_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::RaydiumClmm,
+            11,
+            vec![(5, SPL_TOKEN)],
+        ),
+        (
+            "RaydiumClmm T22",
+            MarketAccounts::RaydiumClmm(raydium_clmm_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::RaydiumClmmT22,
+            15,
+            vec![(5, SPL_TOKEN), (6, SPL_TOKEN_2022), (7, SPL_MEMO)],
+        ),
+        (
+            "OrcaWhirlpool SPL",
+            MarketAccounts::OrcaWhirlpool(orca_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::OrcaWhirlpool,
+            9,
+            vec![(0, SPL_TOKEN)],
+        ),
+        (
+            "OrcaWhirlpool T22",
+            MarketAccounts::OrcaWhirlpool(orca_accounts(SPL_TOKEN, SPL_TOKEN_2022)),
+            MarketId::OrcaWhirlpoolT22,
+            13,
+            vec![(0, SPL_TOKEN), (1, SPL_TOKEN_2022), (2, SPL_MEMO)],
+        ),
+        (
+            "MeteoraDlmm SPL",
+            MarketAccounts::MeteoraDlmm(dlmm_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::MeteoraDlmm,
+            15,
+            vec![(8, SPL_TOKEN), (9, SPL_TOKEN)],
+        ),
+        (
+            "MeteoraDlmm T22",
+            MarketAccounts::MeteoraDlmm(dlmm_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::MeteoraDlmmT22,
+            16,
+            vec![(8, SPL_TOKEN_2022), (9, SPL_TOKEN), (10, SPL_MEMO)],
+        ),
+        (
+            "Pancakeswap SPL",
+            MarketAccounts::Pancakeswap(pancakeswap_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::Pancakeswap,
+            11,
+            vec![(5, SPL_TOKEN)],
+        ),
+        (
+            "Pancakeswap T22",
+            MarketAccounts::Pancakeswap(pancakeswap_accounts(SPL_TOKEN, SPL_TOKEN_2022)),
+            MarketId::PancakeswapT22,
+            15,
+            vec![(5, SPL_TOKEN), (6, SPL_TOKEN_2022), (7, SPL_MEMO)],
+        ),
+        (
+            "ByrealClmm SPL",
+            MarketAccounts::ByrealClmm(byreal_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::ByrealClmm,
+            11,
+            vec![(5, SPL_TOKEN)],
+        ),
+        (
+            "ByrealClmm T22",
+            MarketAccounts::ByrealClmm(byreal_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::ByrealClmmT22,
+            15,
+            vec![(5, SPL_TOKEN), (6, SPL_TOKEN_2022), (7, SPL_MEMO)],
+        ),
+        (
+            "AlphaQ SPL",
+            MarketAccounts::AlphaQ(alphaq_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::AlphaQ,
+            9,
+            vec![(5, SPL_TOKEN)],
+        ),
+        (
+            "AlphaQ T22",
+            MarketAccounts::AlphaQ(alphaq_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::AlphaQT22,
+            10,
+            vec![(5, SPL_TOKEN), (9, SPL_TOKEN_2022)],
+        ),
+        (
+            "GoonfiV2 SPL",
+            MarketAccounts::GoonfiV2(goonfi_accounts(SPL_TOKEN, SPL_TOKEN)),
+            MarketId::GoonfiV2,
+            10,
+            vec![(8, SPL_TOKEN)],
+        ),
+        (
+            "GoonfiV2 T22",
+            MarketAccounts::GoonfiV2(goonfi_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::GoonfiV2T22,
+            11,
+            vec![(8, SPL_TOKEN_2022), (9, SPL_TOKEN)],
+        ),
+    ];
+
+    for (name, market, expected_id, expected_count, expected_programs) in cases {
+        assert_eq!(market.try_market_id(), Ok(expected_id), "{name}");
+        assert_eq!(market.try_account_count(), Ok(expected_count), "{name}");
+        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[13], expected_id.as_u8(), "{name}");
+        let pool_slice = &ix.accounts[8..];
+        assert_eq!(pool_slice.len(), expected_count, "{name}");
+        for (index, program) in expected_programs {
+            assert_eq!(pool_slice[index], AccountMeta::new_readonly(program, false), "{name} index {index}");
+        }
+    }
+}
+
+#[test]
+fn builder_rejects_unknown_programs_for_every_unified_market_family() {
+    let unknown = unique(99);
+    let cases = vec![
+        MarketAccounts::RaydiumClmm(raydium_clmm_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::OrcaWhirlpool(orca_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::MeteoraDlmm(dlmm_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::Pancakeswap(pancakeswap_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::ByrealClmm(byreal_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::AlphaQ(alphaq_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::GoonfiV2(goonfi_accounts(unknown, SPL_TOKEN)),
+    ];
+
+    for market in cases {
+        assert!(matches!(
+            build_find_arb_v2_instruction(params(market)),
+            Err(BuildError::UnsupportedMarketTokenProgram { token_program, .. }) if token_program == unknown
+        ));
+        assert!(market.try_market_id().is_err());
+        assert!(market.try_account_count().is_err());
+    }
 }
 
 #[test]
@@ -282,10 +523,10 @@ fn tessera_emits_public_swap_account_slice() {
     };
     let market = MarketAccounts::Tessera(accounts);
     let mut metas = Vec::new();
-    market.append_account_metas(&mut metas);
+    market.try_append_account_metas(&mut metas).unwrap();
 
-    assert_eq!(market.market_id(), MarketId::Tessera);
-    assert_eq!(market.account_count(), 8);
+    assert_eq!(market.try_market_id().unwrap(), MarketId::Tessera);
+    assert_eq!(market.try_account_count().unwrap(), 8);
     assert_eq!(
         metas,
         vec![
@@ -310,10 +551,10 @@ fn bisonfi_emits_forward_swap_account_slice() {
     };
     let market = MarketAccounts::BisonFi(accounts);
     let mut metas = Vec::new();
-    market.append_account_metas(&mut metas);
+    market.try_append_account_metas(&mut metas).unwrap();
 
-    assert_eq!(market.market_id(), MarketId::BisonFi);
-    assert_eq!(market.account_count(), 7);
+    assert_eq!(market.try_market_id().unwrap(), MarketId::BisonFi);
+    assert_eq!(market.try_account_count().unwrap(), 7);
     assert_eq!(
         metas,
         vec![
@@ -342,10 +583,10 @@ fn zerofi_emits_swap_v4_account_slice() {
     };
     let market = MarketAccounts::ZeroFi(accounts);
     let mut metas = Vec::new();
-    market.append_account_metas(&mut metas);
+    market.try_append_account_metas(&mut metas).unwrap();
 
-    assert_eq!(market.market_id(), MarketId::ZeroFi);
-    assert_eq!(market.account_count(), 10);
+    assert_eq!(market.try_market_id().unwrap(), MarketId::ZeroFi);
+    assert_eq!(market.try_account_count().unwrap(), 10);
     assert_eq!(
         metas,
         vec![
@@ -378,10 +619,10 @@ fn goonfi_v2_automatically_emits_mixed_token_program_account_slice() {
     };
     let market = MarketAccounts::GoonfiV2(accounts);
     let mut metas = Vec::new();
-    market.append_account_metas(&mut metas);
+    market.try_append_account_metas(&mut metas).unwrap();
 
-    assert_eq!(market.market_id(), MarketId::GoonfiV2T22);
-    assert_eq!(market.account_count(), 11);
+    assert_eq!(market.try_market_id().unwrap(), MarketId::GoonfiV2T22);
+    assert_eq!(market.try_account_count().unwrap(), 11);
     assert_eq!(
         metas,
         vec![
@@ -420,6 +661,167 @@ fn deprecated_goonfi_v2_t22_alias_preserves_wire_output() {
 
     assert_eq!(legacy.data, automatic.data);
     assert_eq!(legacy.accounts, automatic.accounts);
+}
+
+#[test]
+#[allow(deprecated)]
+fn deprecated_t22_aliases_validate_programs_and_builder_metadata() {
+    let cases = vec![
+        (
+            MarketAccounts::MeteoraDlmmT22(dlmm_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::MeteoraDlmmT22,
+            16,
+        ),
+        (
+            MarketAccounts::OrcaWhirlpoolT22(OrcaWhirlpoolT22Accounts {
+                token_program_a: SPL_TOKEN,
+                token_program_b: SPL_TOKEN_2022,
+                whirlpool: unique(1),
+                token_mint_a: unique(2),
+                token_mint_b: unique(3),
+                vault_a: unique(4),
+                vault_b: unique(5),
+                tick_array_prev: unique(6),
+                tick_array_cur: unique(7),
+                tick_array_next: unique(8),
+                oracle: unique(9),
+            }),
+            MarketId::OrcaWhirlpoolT22,
+            13,
+        ),
+        (
+            MarketAccounts::AlphaQT22(alphaq_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::AlphaQT22,
+            10,
+        ),
+        (
+            MarketAccounts::GoonfiV2T22(goonfi_accounts(SPL_TOKEN_2022, SPL_TOKEN)),
+            MarketId::GoonfiV2T22,
+            11,
+        ),
+    ];
+
+    for (market, expected_id, expected_count) in cases {
+        assert_eq!(market.try_market_id(), Ok(expected_id));
+        assert_eq!(market.try_account_count(), Ok(expected_count));
+        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[13], expected_id.as_u8());
+        assert_eq!(ix.accounts.len(), 8 + expected_count);
+    }
+
+    let invalid_pairs = vec![
+        MarketAccounts::MeteoraDlmmT22(dlmm_accounts(SPL_TOKEN, SPL_TOKEN)),
+        MarketAccounts::OrcaWhirlpoolT22(OrcaWhirlpoolT22Accounts {
+            token_program_a: SPL_TOKEN,
+            token_program_b: SPL_TOKEN,
+            whirlpool: unique(1),
+            token_mint_a: unique(2),
+            token_mint_b: unique(3),
+            vault_a: unique(4),
+            vault_b: unique(5),
+            tick_array_prev: unique(6),
+            tick_array_cur: unique(7),
+            tick_array_next: unique(8),
+            oracle: unique(9),
+        }),
+        MarketAccounts::AlphaQT22(alphaq_accounts(SPL_TOKEN, SPL_TOKEN)),
+        MarketAccounts::AlphaQT22(alphaq_accounts(SPL_TOKEN_2022, SPL_TOKEN_2022)),
+        MarketAccounts::GoonfiV2T22(goonfi_accounts(SPL_TOKEN, SPL_TOKEN)),
+    ];
+    for market in invalid_pairs {
+        assert!(matches!(
+            build_find_arb_v2_instruction(params(market)),
+            Err(BuildError::UnsupportedMarketTokenProgramPair { .. })
+        ));
+    }
+
+    let unknown = unique(99);
+    let invalid = vec![
+        MarketAccounts::MeteoraDlmmT22(dlmm_accounts(unknown, SPL_TOKEN_2022)),
+        MarketAccounts::OrcaWhirlpoolT22(OrcaWhirlpoolT22Accounts {
+            token_program_a: unknown,
+            token_program_b: SPL_TOKEN_2022,
+            whirlpool: unique(1),
+            token_mint_a: unique(2),
+            token_mint_b: unique(3),
+            vault_a: unique(4),
+            vault_b: unique(5),
+            tick_array_prev: unique(6),
+            tick_array_cur: unique(7),
+            tick_array_next: unique(8),
+            oracle: unique(9),
+        }),
+        MarketAccounts::AlphaQT22(alphaq_accounts(unknown, SPL_TOKEN)),
+        MarketAccounts::GoonfiV2T22(goonfi_accounts(unknown, SPL_TOKEN_2022)),
+    ];
+    for market in invalid {
+        assert!(matches!(
+            build_find_arb_v2_instruction(params(market)),
+            Err(BuildError::UnsupportedMarketTokenProgram { token_program, .. }) if token_program == unknown
+        ));
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn legacy_t22_aliases_without_program_fields_remain_forced_compatibility_paths() {
+    let cases = vec![
+        (
+            MarketAccounts::RaydiumClmmT22(RaydiumClmmT22Accounts {
+                pool_state: unique(1),
+                amm_config: unique(2),
+                token_vault_0: unique(3),
+                token_vault_1: unique(4),
+                observation_state: unique(5),
+                token_mint_0: unique(6),
+                token_mint_1: unique(7),
+                tick_array_bitmap_ext: unique(8),
+                tick_array_prev: unique(9),
+                tick_array_cur: unique(10),
+                tick_array_next: unique(11),
+            }),
+            MarketId::RaydiumClmmT22,
+        ),
+        (
+            MarketAccounts::PancakeswapT22(PancakeswapT22Accounts {
+                pool_state: unique(1),
+                amm_config: unique(2),
+                token_vault_0: unique(3),
+                token_vault_1: unique(4),
+                observation_state: unique(5),
+                token_mint_0: unique(6),
+                token_mint_1: unique(7),
+                tick_array_bitmap_ext: unique(8),
+                tick_array_prev: unique(9),
+                tick_array_cur: unique(10),
+                tick_array_next: unique(11),
+            }),
+            MarketId::PancakeswapT22,
+        ),
+        (
+            MarketAccounts::ByrealClmmT22(ByrealClmmT22Accounts {
+                pool_state: unique(1),
+                amm_config: unique(2),
+                token_vault_0: unique(3),
+                token_vault_1: unique(4),
+                observation_state: unique(5),
+                token_mint_0: unique(6),
+                token_mint_1: unique(7),
+                tick_array_bitmap_ext: unique(8),
+                tick_array_prev: unique(9),
+                tick_array_cur: unique(10),
+                tick_array_next: unique(11),
+            }),
+            MarketId::ByrealClmmT22,
+        ),
+    ];
+
+    for (market, expected_id) in cases {
+        assert_eq!(market.try_market_id(), Ok(expected_id));
+        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[13], expected_id.as_u8());
+        assert_eq!(ix.accounts.len(), 8 + 15);
+    }
 }
 
 #[test]
@@ -825,14 +1227,13 @@ fn all_market_slices_have_expected_writable_orders() {
 
     for (accounts, writable_indexes) in cases {
         let mut metas = Vec::new();
-        accounts.append_account_metas(&mut metas);
-        assert_eq!(metas.len(), accounts.account_count(), "{}", accounts.variant_name());
+        accounts.try_append_account_metas(&mut metas).unwrap();
+        assert_eq!(metas.len(), accounts.try_account_count().unwrap(), "{accounts:?}");
         for (index, meta) in metas.iter().enumerate() {
             assert_eq!(
                 meta.is_writable,
                 writable_indexes.contains(&index),
-                "{} index {}",
-                accounts.variant_name(),
+                "{accounts:?} index {}",
                 index
             );
             assert!(!meta.is_signer);
@@ -851,14 +1252,14 @@ fn documented_placeholders_use_market_program_sentinels() {
         token_y_mint: unique(6),
         oracle: unique(7),
         host_fee_in: None,
-        token_x_program: unique(8),
-        token_y_program: unique(9),
+        token_x_program: SPL_TOKEN,
+        token_y_program: SPL_TOKEN,
         bin_array_prev: unique(10),
         bin_array_cur: unique(11),
         bin_array_next: unique(12),
     });
     let mut metas = Vec::new();
-    dlmm.append_account_metas(&mut metas);
+    dlmm.try_append_account_metas(&mut metas).unwrap();
     assert_eq!(metas[7], AccountMeta::new(METEORA_DLMM, false));
 
     let damm = MarketAccounts::MeteoraDammV2(MeteoraDammV2Accounts {
@@ -872,7 +1273,7 @@ fn documented_placeholders_use_market_program_sentinels() {
         instructions_sysvar_or_program_sentinel: None,
     });
     metas.clear();
-    damm.append_account_metas(&mut metas);
+    damm.try_append_account_metas(&mut metas).unwrap();
     assert_eq!(metas[10], AccountMeta::new_readonly(METEORA_DAMM_V2, false));
 
     let pump = MarketAccounts::PumpfunAmm(PumpfunAmmAccounts {
@@ -894,7 +1295,7 @@ fn documented_placeholders_use_market_program_sentinels() {
         swap_fee_ata: unique(14),
     });
     metas.clear();
-    pump.append_account_metas(&mut metas);
+    pump.try_append_account_metas(&mut metas).unwrap();
     assert_eq!(metas[20], AccountMeta::new_readonly(PUMPFUN_AMM, false));
     assert_eq!(metas[21], AccountMeta::new_readonly(PUMPFUN_AMM, false));
 }
@@ -1020,7 +1421,7 @@ fn clmm_current_tick_array_accepts_program_id_placeholder() {
 
     for (accounts, cur_index, program_id) in cases {
         let mut metas = Vec::new();
-        accounts.append_account_metas(&mut metas);
+        accounts.try_append_account_metas(&mut metas).unwrap();
         assert_eq!(metas[cur_index], AccountMeta::new(program_id, false));
     }
 }
