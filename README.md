@@ -175,7 +175,7 @@ USD1 fee ATA = ATA(FEE_OWNER, USD1_MINT, SPL_TOKEN)
 
 This non-flashloan path supports WSOL, USDC, USDT, and USD1. The transfer is fee-only; no principal is repaid because Prism did not borrow from a vault.
 
-Prism charges a 7% protocol fee only on realized profit from profitable arbitrage. The fee is paid through the selected flashloan vault or non-flashloan fee-recipient ATA. Failed attempts and attempts where Prism finds no profitable route do not pay this protocol fee.
+Prism charges a 10% protocol fee only on realized profit from profitable arbitrage. The fee is paid through the selected flashloan vault or non-flashloan fee-recipient ATA. Failed attempts and attempts where Prism finds no profitable route do not pay this protocol fee.
 
 The SDK computes these addresses internally. It also exposes `prism_flashloan_vault_accounts(base_mint)`, `prism_fee_recipient_ata(base_mint, base_token_program)`, `prism_base_mint_supported(base_mint)`, and `associated_token_address(owner, mint, token_program)` for callers that want to inspect or pre-create the same accounts.
 
