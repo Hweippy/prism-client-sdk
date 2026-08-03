@@ -239,6 +239,32 @@ fn builder_rejects_alphaq_token2022_on_right_side() {
 }
 
 #[test]
+fn public_builder_auto_selects_dlmm_t22_and_inserts_memo() {
+    const FIRST_POOL_ACCOUNT: usize = 8;
+
+    let spl_ix = build_find_arb_v2_instruction(params(MarketAccounts::MeteoraDlmm(
+        dlmm_accounts(SPL_TOKEN, SPL_TOKEN),
+    )))
+    .unwrap();
+    assert_eq!(spl_ix.data[13], MarketId::MeteoraDlmm.as_u8());
+    assert_eq!(spl_ix.accounts.len(), FIRST_POOL_ACCOUNT + 15);
+    assert!(!spl_ix.accounts[FIRST_POOL_ACCOUNT..]
+        .iter()
+        .any(|meta| meta.pubkey == SPL_MEMO));
+
+    let t22_ix = build_find_arb_v2_instruction(params(MarketAccounts::MeteoraDlmm(
+        dlmm_accounts(SPL_TOKEN_2022, SPL_TOKEN),
+    )))
+    .unwrap();
+    assert_eq!(t22_ix.data[13], MarketId::MeteoraDlmmT22.as_u8());
+    assert_eq!(t22_ix.accounts.len(), FIRST_POOL_ACCOUNT + 16);
+    assert_eq!(
+        t22_ix.accounts[FIRST_POOL_ACCOUNT + 10],
+        AccountMeta::new_readonly(SPL_MEMO, false),
+    );
+}
+
+#[test]
 fn builder_resolves_unified_market_ids_counts_and_program_order() {
     let cases = vec![
         (
