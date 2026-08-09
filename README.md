@@ -63,6 +63,7 @@ The SDK starts after you already know the accounts. With those pubkeys already i
 use prism_client_sdk::{
     build_find_arb_v2_instruction, FindArbV2Params, MintAccount,
     markets::{
+        meteora::MeteoraDlmmAccounts,
         raydium::{RaydiumCpAccounts, RaydiumV4Accounts},
         MarketAccounts,
     },
@@ -71,6 +72,7 @@ use solana_pubkey::Pubkey;
 
 const WSOL_MINT: Pubkey = Pubkey::from_str_const("So11111111111111111111111111111111111111112");
 const USDC_MINT: Pubkey = Pubkey::from_str_const("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+const TRUMP_MINT: Pubkey = Pubkey::from_str_const("6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN");
 const SPL_TOKEN: Pubkey = Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 let ix = build_find_arb_v2_instruction(FindArbV2Params {
@@ -109,6 +111,46 @@ let ix = build_find_arb_v2_instruction(FindArbV2Params {
 ```
 
 This example builds a two-pool menu for a 2-hop candidate. The caller is still responsible for selecting pools whose endpoint mints match `base` and `route_mints`; the SDK only assembles the instruction.
+
+For a 3-hop candidate, submit both non-base mints and three markets that form `BASE ↔ A ↔ B ↔ BASE`:
+
+```rust
+let ix_3hop = build_find_arb_v2_instruction(FindArbV2Params {
+    signer,
+    // Same base and execution settings as in the 2-hop example above.
+    base: MintAccount {
+        mint: WSOL_MINT,
+        token_program: SPL_TOKEN,
+        user_ata: wsol_user_ata,
+    },
+    flashloan: true,
+    fail_if_no_profit: true,
+    min_profit_base_units: 10_000,
+    max_dynamic_walk_steps: 12,
+    route_mints: vec![
+        MintAccount {
+            mint: USDC_MINT,
+            token_program: SPL_TOKEN,
+            user_ata: usdc_user_ata,
+        },
+        MintAccount {
+            mint: TRUMP_MINT,
+            token_program: SPL_TOKEN,
+            user_ata: trump_user_ata,
+        },
+    ],
+    pools: vec![
+        // WSOL ↔ USDC
+        MarketAccounts::RaydiumV4(RaydiumV4Accounts { /* ... */ }),
+        // USDC ↔ TRUMP (the bridge market)
+        MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
+        // TRUMP ↔ WSOL
+        MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
+    ],
+})?;
+```
+
+The three entries are still an unordered pool menu: the labels above describe their required mint connectivity, not a caller-enforced execution order.
 
 ## Instruction Data
 
