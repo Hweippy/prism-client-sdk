@@ -1,8 +1,8 @@
 # prism-client-sdk
 
-Self-contained Rust builder for one Prism `find_arb_v2` instruction.
+Self-contained Rust builders for Prism `find_arb_v2` and `find_arb_v3` instructions.
 
-Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified `find_arb_v2` instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv).
+Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb_v2` for direct walk-depth control. V3 accepts the same pool menus and adds budget-based sizing when the winning candidate is Pump/DLMM.
 
 <img width="600" height="150" alt="image" src="https://github.com/user-attachments/assets/be89d44a-f0c2-4b20-9573-dfe07a691a23" />
 
@@ -12,7 +12,7 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 - [Supported Programs](#supported-programs)
 - [Route Shape](#route-shape)
-- [Rust Example](#rust-example)
+- [Rust Examples](#rust-examples)
 - [Instruction Data](#instruction-data)
 - [Settlement Accounts](#settlement-accounts)
 - [Account Prefix](#account-prefix)
@@ -49,15 +49,19 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 ## Route Shape
 
-`find_arb_v2` supports up to 3-hop arbitrage. It does not build or execute routes with more than three swap legs.
+`find_arb_v2` and `find_arb_v3` support up to 3-hop arbitrage. They do not build or execute routes with more than three swap legs.
 
 The `base` mint and `route_mints` fields have the same meaning for both shapes. `base` is the cycle's base token, and `route_mints` contains every non-base mint the submitted pool graph may touch. For a 2-hop route, that is usually one target mint. For a 3-hop route, include both non-base mints in the triangle.
 
 `pools` is an unordered pool menu, not an ordered route. Prism reads each pool's endpoint mints on-chain, builds the candidate graph, and chooses the executable route order itself. Pools that touch `base` can become direct edges for 2-hop routes. Pools that do not touch `base`, but connect two submitted `route_mints`, can become the middle bridge edge of a 3-hop route. Submitting bridge pools for possible 3-hop routes does not disable 2-hop evaluation; Prism evaluates direct 2-hop candidates from the same pool menu when matching base-touching pools are present. The order of `pools` only controls instruction serialization; it does not force route execution order.
 
-## Rust Example
+## Rust Examples
 
-The SDK starts after you already know the accounts. With those pubkeys already in scope, pass them into the typed structs and build the Prism instruction:
+The SDK does no account discovery. With the required pubkeys in scope, put them into the typed parameters:
+
+### V2: manual walk depth
+
+In V2, `max_dynamic_walk_steps` controls dynamic liquidity walks on the selected route. It caps Meteora DLMM bin scans and Raydium CLMM, Orca Whirlpool, PancakeSwap, and Byreal tick-walk steps per direction; constant-product pools do not use it. Higher values can reach deeper liquidity but use more compute, while lower values save compute but can miss deeper routes.
 
 ```rust
 use prism_client_sdk::{
@@ -110,57 +114,98 @@ let ix = build_find_arb_v2_instruction(FindArbV2Params {
 })?;
 ```
 
-This example builds a two-pool menu for a 2-hop candidate. The caller is still responsible for selecting pools whose endpoint mints match `base` and `route_mints`; the SDK only assembles the instruction.
+This builds a two-pool menu for a 2-hop candidate. The SDK assembles the instruction; the caller chooses pools whose endpoint mints match `base` and `route_mints`.
 
-For a 3-hop candidate, submit both non-base mints and three markets that form `BASE ↔ A ↔ B ↔ BASE`:
+### V3: budget-based walk sizing
+
+V3 accepts every pool menu supported by V2. When the winning candidate is Pump/DLMM, Prism uses the explicit CU budget to size its DLMM walk. Other winners use `max_dynamic_walk_steps`.
 
 ```rust
-let ix_3hop = build_find_arb_v2_instruction(FindArbV2Params {
-    signer,
-    // Same base and execution settings as in the 2-hop example above.
-    base: MintAccount {
-        mint: WSOL_MINT,
-        token_program: SPL_TOKEN,
-        user_ata: wsol_user_ata,
+use prism_client_sdk::{
+    build_find_arb_v3_instruction, FindArbV3Params,
+    markets::{
+        meteora::MeteoraDlmmAccounts,
+        pumpfun::PumpfunAmmAccounts,
+        MarketAccounts,
     },
+};
+
+let ix = build_find_arb_v3_instruction(FindArbV3Params {
+    signer,
+    base,
     flashloan: true,
     fail_if_no_profit: true,
     min_profit_base_units: 10_000,
     max_dynamic_walk_steps: 12,
-    route_mints: vec![
-        MintAccount {
-            mint: USDC_MINT,
-            token_program: SPL_TOKEN,
-            user_ata: usdc_user_ata,
-        },
-        MintAccount {
-            mint: TRUMP_MINT,
-            token_program: SPL_TOKEN,
-            user_ata: trump_user_ata,
-        },
-    ],
+    prism_cu_budget: 320_000,
+    route_mints,
     pools: vec![
-        // WSOL ↔ USDC
-        MarketAccounts::RaydiumV4(RaydiumV4Accounts { /* ... */ }),
-        // USDC ↔ TRUMP (the bridge market)
-        MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
-        // TRUMP ↔ WSOL
+        MarketAccounts::PumpfunAmm(PumpfunAmmAccounts { /* ... */ }),
         MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
     ],
 })?;
 ```
 
-The three entries are still an unordered pool menu: the labels above describe their required mint connectivity, not a caller-enforced execution order.
+V2 and V3 accept the same account prefix and unordered pool menu. Both support 2-hop and 3-hop routes.
+
+### Three-hop pool menu
+
+For either builder, a 3-hop candidate supplies both non-base mints and three markets that form `BASE ↔ A ↔ B ↔ BASE`:
+
+```rust
+let route_mints = vec![
+    MintAccount {
+        mint: USDC_MINT,
+        token_program: SPL_TOKEN,
+        user_ata: usdc_user_ata,
+    },
+    MintAccount {
+        mint: TRUMP_MINT,
+        token_program: SPL_TOKEN,
+        user_ata: trump_user_ata,
+    },
+];
+
+let pools = vec![
+    // WSOL ↔ USDC
+    MarketAccounts::RaydiumV4(RaydiumV4Accounts { /* ... */ }),
+    // USDC ↔ TRUMP (the bridge market)
+    MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
+    // TRUMP ↔ WSOL
+    MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
+];
+```
+
+The pool entries remain unordered; their mint connectivity determines the executable route.
 
 ## Instruction Data
 
-`find_arb_v2` data layout:
+### V2
+
+V2 uses `max_dynamic_walk_steps` as the caller's walk-depth request.
 
 ```text
 [7, flags, max_dynamic_walk_steps, num_mints, num_pools, min_profit_base_units_le_u64, market_ids...]
 ```
 
-`max_dynamic_walk_steps` is Prism's wire byte for dynamic walk-table depth. Prism uses it as the per-direction DLMM bin-walk request and as the produced-step cap for selected CL-family tick walks, then clamps it to each program-side capacity. For example, `20` asks Prism to walk up to 20 DLMM bins or selected CL tick steps per direction. Raising this value can find deeper walked liquidity, but increases compute and account-window pressure; lowering it keeps attempts lighter, but can miss routes that need a wider walk.
+### V3
+
+V3 supports the same pools and account metas as V2, and adds a nonzero Prism CU budget. The budget sizes the DLMM walk only when the winning candidate is Pump/DLMM; other winners use `max_dynamic_walk_steps`.
+
+```text
+[11, flags, max_dynamic_walk_steps, num_mints, num_pools, min_profit_base_units_le_u64, prism_cu_budget_le_u32, market_ids...]
+```
+
+`prism_cu_budget` is for the Prism instruction alone, not the transaction CU limit:
+
+```text
+prism_cu_budget =
+    requested_transaction_cu_limit
+  - conservative_reserve_for_all_non_prism_instructions
+  - caller_transaction_margin
+```
+
+The caller chooses the reserve and margin. The SDK only validates that the budget is nonzero and serializes it.
 
 `min_profit_base_units` is denominated in the submitted base mint's atomic
 units. For WSOL this is native lamports. For USDC, USDT, and USD1 it is
@@ -261,12 +306,11 @@ user ATA                 writable
 1  RaydiumCp
 2  RaydiumClmm
 3  OrcaWhirlpool
-4  MeteoraDlmm
 5  MeteoraDammV2
 6  MeteoraPools
 7  PumpfunAmm
 8  Pancakeswap
-9  MeteoraDlmmT22
+9  MeteoraDlmm
 10 RaydiumClmmT22
 11 PancakeswapT22
 12 OrcaWhirlpoolT22
@@ -287,11 +331,11 @@ user ATA                 writable
 28 GoonfiV2T22
 ```
 
-These are wire IDs understood by the on-chain program. Callers do not choose between the normal and `T22` IDs for paired market families. The SDK selects the wire ID and matching account slice from the token programs supplied in the normal family struct.
+These are wire IDs emitted by this SDK. Legacy DLMM wire ID 4 is intentionally not exposed: `MeteoraDlmm` always emits wire ID 9 and the 16-account `swap2` layout, including for SPL/SPL pools. The deprecated `MarketAccounts::MeteoraDlmmT22` and `MarketId::MeteoraDlmmT22` names remain source aliases for the same wire ID 9 and layout; they do not emit ID 4.
 
 ## Market Accounts
 
-Callers pass `FindArbV2Params { pools: Vec<MarketAccounts> }`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the wire market ID, inserts Prism's fixed program IDs, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
+Callers pass `FindArbV2Params` or `FindArbV3Params` with `pools: Vec<MarketAccounts>`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the wire market ID, inserts Prism's fixed program IDs, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
 
 There is no separate market id field to keep in sync with a raw pubkey slice. If the variant is `MarketAccounts::RaydiumV4`, the instruction data receives market id `0` and the Raydium v4 account layout is emitted.
 
@@ -307,11 +351,11 @@ MarketAccounts::AlphaQ
 MarketAccounts::GoonfiV2
 ```
 
-Supply both endpoint mint addresses and their exact token program IDs in the account struct. If both programs are SPL Token, the SDK emits the normal wire ID and slice. If either program is Token-2022, it emits the `T22` wire ID and slice. AlphaQ is narrower: it supports SPL/SPL and Token-2022-left/SPL-right only. Unsupported program IDs and unsupported AlphaQ orientations return `BuildError`.
+Supply both endpoint mint addresses and their exact token program IDs in the account struct. DLMM validates both IDs but always emits its `swap2` wire ID and slice. For the other paired families, both SPL Token programs select the normal wire ID and either Token-2022 program selects the `T22` wire ID and slice. AlphaQ is narrower: it supports SPL/SPL and Token-2022-left/SPL-right only. Unsupported program IDs and unsupported AlphaQ orientations return `BuildError`.
 
-This selection is deterministic and performs no RPC calls. The caller remains responsible for reading the mint owners or otherwise supplying the correct token program IDs. `MarketAccounts::try_market_id()` and `try_account_count()` expose the same checked resolution used by `build_find_arb_v2_instruction`; invalid token programs never produce a public wire ID or count.
+This selection is deterministic and performs no RPC calls. The caller remains responsible for reading the mint owners or otherwise supplying the correct token program IDs. `MarketAccounts::try_market_id()` and `try_account_count()` expose the same checked resolution used by both arb builders; invalid token programs never produce a public wire ID or count.
 
-The explicit `MarketAccounts::*T22` variants remain temporarily available as deprecated compatibility aliases; new code should use the normal family variants above. Aliases that carry token-program fields validate them and reject an all-SPL selection. `AlphaQT22` specifically requires Token-2022-left/SPL-right. The legacy `RaydiumClmmT22Accounts`, `PancakeswapT22Accounts`, and `ByrealClmmT22Accounts` structs do not carry token-program fields, so those three aliases are the documented exception: they retain forced-T22 behavior that the SDK cannot validate from their inputs.
+The remaining explicit `MarketAccounts::*T22` variants are temporarily available as deprecated compatibility aliases. The deprecated `MeteoraDlmmT22` alias accepts either SPL or Token-2022 programs and resolves to the canonical ID 9 Swap2 layout. Other checked aliases reject an all-SPL selection, and `AlphaQT22` specifically requires Token-2022-left/SPL-right. The legacy `RaydiumClmmT22Accounts`, `PancakeswapT22Accounts`, and `ByrealClmmT22Accounts` structs do not carry token-program fields, so those three aliases retain forced-T22 behavior that the SDK cannot validate from their inputs.
 
 Documented optional placeholders are represented as `Option<Pubkey>`:
 
@@ -340,7 +384,7 @@ All other fields are required. The SDK does not invent dynamic pool accounts, de
 
 ## Emitted Pool Slices
 
-The SDK emits each pool as one contiguous account slice. The slice order must match the `MarketAccounts` variant order in `FindArbV2Params.pools`, because Prism slices the remaining accounts by the emitted `market_ids`.
+The SDK emits each pool as one contiguous account slice. The slice order must match the `MarketAccounts` variant order in `FindArbV2Params.pools` or `FindArbV3Params.pools`, because Prism slices the remaining accounts by the emitted `market_ids`.
 
 Legend:
 
@@ -449,29 +493,9 @@ Automatically selected for `OrcaWhirlpool` when either supplied endpoint token p
 12     Orca Whirlpool program             SDK constant
 ```
 
-### Meteora DLMM
+### Meteora DLMM (wire MarketId 9, Swap2)
 
-```text
-0  W   lb_pair                            caller
-1  W   bin_array_bitmap_ext               caller
-2  W   reserve_x                          caller
-3  W   reserve_y                          caller
-4      token_x_mint                       caller
-5      token_y_mint                       caller
-6  W   oracle                             caller
-7  W   host_fee_in or DLMM placeholder    caller option or SDK constant
-8      token_x_program                    caller
-9      token_y_program                    caller
-10     DLMM event authority               SDK constant
-11     DLMM program                       SDK constant
-12 W   bin_array_prev                     caller
-13 W   bin_array_cur                      caller
-14 W   bin_array_next                     caller
-```
-
-### Meteora DLMM Token-2022
-
-Automatically selected for `MeteoraDlmm` when either supplied endpoint token program is Token-2022.
+`MeteoraDlmm` always emits this layout for both SPL Token and Token-2022 pools. The SDK does not expose or emit legacy wire ID 4. Its deprecated `MeteoraDlmmT22` source alias emits this same layout and wire ID 9.
 
 ```text
 0  W   lb_pair                            caller
@@ -491,6 +515,11 @@ Automatically selected for `MeteoraDlmm` when either supplied endpoint token pro
 14 W   bin_array_cur                      caller
 15 W   bin_array_next                     caller
 ```
+
+The `prev/cur/next` field names are retained API names for the three fixed
+slots. Bitmap-aware callers may supply a compact directional live-array union
+there, including duplicated or gap-shifted arrays; Prism validates and orders
+the accounts for Swap2 on-chain.
 
 ### Meteora DAMM v2
 
@@ -762,7 +791,7 @@ The caller is responsible for using the correct dynamic pool, vault, mint, token
 
 ## Common On-chain Errors
 
-These are Prism `Custom(u32)` errors callers commonly see after simulating or sending a `find_arb_v2` instruction. Solana logs the same value in hexadecimal as `custom program error: 0x...`.
+These are Prism `Custom(u32)` errors callers commonly see after simulating or sending a `find_arb_v2` or `find_arb_v3` instruction. Solana logs the same value in hexadecimal as `custom program error: 0x...`.
 
 Account and pool layout errors:
 
@@ -793,16 +822,17 @@ Arb outcome and execution errors:
 
 | Error | When | Notes |
 | --- | --- | --- |
-| `UnsupportedBaseMint(pubkey)` | `FindArbV2Params.base.mint` is not WSOL, USDC, USDT, or USD1, or the base token program is not SPL Token. | Choose one of Prism's supported settlement base mints. |
-| `UnsupportedFlashloanBaseMint(pubkey)` | `flashloan = true` and `FindArbV2Params.base.mint` is not WSOL or USDC. | Disable flashloan for USDT/USD1 routes, or use a WSOL/USDC base mint with an initialized and funded Prism vault. |
+| `UnsupportedBaseMint(pubkey)` | The V2 or V3 `base.mint` is not WSOL, USDC, USDT, or USD1, or the base token program is not SPL Token. | Choose one of Prism's supported settlement base mints. |
+| `UnsupportedFlashloanBaseMint(pubkey)` | `flashloan = true` and the V2 or V3 `base.mint` is not WSOL or USDC. | Disable flashloan for USDT/USD1 routes, or use a WSOL/USDC base mint with an initialized and funded Prism vault. |
 | `RouteMintCountOverflow(count)` | `route_mints.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |
 | `MissingRouteMints` | `route_mints` is empty. | Prism needs at least one route mint header to map pool endpoints to user token accounts. Add one `MintAccount` for each target or bridge mint used by the pool graph. |
-| `BaseMintInRouteMints(pubkey)` | A route mint entry repeats `base.mint`. | The base mint is already represented by `FindArbV2Params.base`; remove it from `route_mints`. |
+| `BaseMintInRouteMints(pubkey)` | A route mint entry repeats `base.mint`. | The base mint is already represented by the V2/V3 params `base`; remove it from `route_mints`. |
 | `DuplicateRouteMint(pubkey)` | The same route mint appears more than once. | Deduplicate by mint pubkey and keep the matching token program plus user ATA in the remaining `MintAccount`. |
 | `MissingPools` | `pools` is empty. | Add at least one `MarketAccounts` variant. The SDK does not infer pools from mints or route intent. |
 | `PoolCountOverflow(count)` | `pools.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |
 | `UnsupportedMarketId(byte)` | `markets::MarketId::try_from(byte)` received a byte outside the SDK's supported market id range. | This does not occur when building with typed `MarketAccounts` variants, because the variant supplies the market id. |
 | `UnsupportedMarketTokenProgram { market, token_program }` | A unified market struct contains a token program other than SPL Token or Token-2022. | Supply the actual owner program of each endpoint mint. |
 | `UnsupportedMarketTokenProgramPair { market, token_program_a, token_program_b }` | The individual programs are recognized, but that market does not support the orientation. | Currently this guards AlphaQ, which supports SPL/SPL and Token-2022-left/SPL-right only. |
+| `InvalidPrismCuBudget` | `FindArbV3Params.prism_cu_budget` is zero. | Supply a nonzero Prism-only CU allowance. Use V2 if the caller cannot provide one. |
 
 The SDK does not validate account existence, token account ownership, pool state, pool endpoint mints, route profitability, lookup table fit, compute budget, or transaction account-lock count. Those checks belong to the caller's indexer, simulator, transaction builder, or Prism itself.

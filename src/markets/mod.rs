@@ -30,12 +30,11 @@ pub enum MarketId {
     RaydiumCp = 1,
     RaydiumClmm = 2,
     OrcaWhirlpool = 3,
-    MeteoraDlmm = 4,
     MeteoraDammV2 = 5,
     MeteoraPools = 6,
     PumpfunAmm = 7,
     Pancakeswap = 8,
-    MeteoraDlmmT22 = 9,
+    MeteoraDlmm = 9,
     RaydiumClmmT22 = 10,
     PancakeswapT22 = 11,
     OrcaWhirlpoolT22 = 12,
@@ -61,6 +60,13 @@ impl MarketId {
         self as u8
     }
 
+    /// Deprecated source-compatibility alias for the old DLMM Token-2022
+    /// name. It intentionally resolves to the single Swap2 wire ID (9); the
+    /// legacy ID 4 is not part of this SDK's public wire-ID set anymore.
+    #[deprecated(note = "use MarketId::MeteoraDlmm; both names resolve to wire ID 9")]
+    #[allow(non_upper_case_globals)]
+    pub const MeteoraDlmmT22: Self = Self::MeteoraDlmm;
+
     pub const fn name(self) -> &'static str {
         match self {
             Self::RaydiumV4 => "RaydiumV4",
@@ -72,7 +78,6 @@ impl MarketId {
             Self::MeteoraPools => "MeteoraPools",
             Self::PumpfunAmm => "PumpfunAmm",
             Self::Pancakeswap => "Pancakeswap",
-            Self::MeteoraDlmmT22 => "MeteoraDlmmT22",
             Self::RaydiumClmmT22 => "RaydiumClmmT22",
             Self::PancakeswapT22 => "PancakeswapT22",
             Self::OrcaWhirlpoolT22 => "OrcaWhirlpoolT22",
@@ -104,12 +109,11 @@ impl TryFrom<u8> for MarketId {
             1 => Ok(Self::RaydiumCp),
             2 => Ok(Self::RaydiumClmm),
             3 => Ok(Self::OrcaWhirlpool),
-            4 => Ok(Self::MeteoraDlmm),
             5 => Ok(Self::MeteoraDammV2),
             6 => Ok(Self::MeteoraPools),
             7 => Ok(Self::PumpfunAmm),
             8 => Ok(Self::Pancakeswap),
-            9 => Ok(Self::MeteoraDlmmT22),
+            9 => Ok(Self::MeteoraDlmm),
             10 => Ok(Self::RaydiumClmmT22),
             11 => Ok(Self::PancakeswapT22),
             12 => Ok(Self::OrcaWhirlpoolT22),
@@ -146,7 +150,7 @@ pub enum MarketAccounts {
     PumpfunAmm(pumpfun::PumpfunAmmAccounts),
     Pancakeswap(pancakeswap::PancakeswapAccounts),
     #[deprecated(
-        note = "use MeteoraDlmm; the SDK selects MeteoraDlmmT22 automatically from the token programs"
+        note = "use MeteoraDlmm; this alias emits wire ID 9 and the Swap2 layout"
     )]
     MeteoraDlmmT22(meteora::MeteoraDlmmAccounts),
     #[deprecated(
@@ -225,12 +229,17 @@ impl MarketAccounts {
                 MarketId::OrcaWhirlpool,
                 MarketId::OrcaWhirlpoolT22,
             )?,
-            Self::MeteoraDlmm(accounts) => paired_market_id(
+            Self::MeteoraDlmm(accounts) => required_swap2_market_id(
                 "MeteoraDlmm",
                 accounts.token_x_program,
                 accounts.token_y_program,
                 MarketId::MeteoraDlmm,
-                MarketId::MeteoraDlmmT22,
+            )?,
+            Self::MeteoraDlmmT22(accounts) => required_swap2_market_id(
+                "MeteoraDlmmT22",
+                accounts.token_x_program,
+                accounts.token_y_program,
+                MarketId::MeteoraDlmm,
             )?,
             Self::MeteoraDammV2(_) => MarketId::MeteoraDammV2,
             Self::MeteoraPools(_) => MarketId::MeteoraPools,
@@ -241,12 +250,6 @@ impl MarketAccounts {
                 accounts.token_program_1,
                 MarketId::Pancakeswap,
                 MarketId::PancakeswapT22,
-            )?,
-            Self::MeteoraDlmmT22(accounts) => required_t22_market_id(
-                "MeteoraDlmmT22",
-                accounts.token_x_program,
-                accounts.token_y_program,
-                MarketId::MeteoraDlmmT22,
             )?,
             // These three legacy structs predate token-program fields. They
             // remain forced-T22 compatibility aliases because there is no
@@ -318,9 +321,8 @@ impl MarketAccounts {
                     orca::append_whirlpool(out, accounts);
                 }
             }
-            Self::MeteoraDlmm(accounts) => {
-                meteora::append_dlmm(out, accounts, market_id == MarketId::MeteoraDlmmT22);
-            }
+            Self::MeteoraDlmm(accounts) => meteora::append_dlmm(out, accounts),
+            Self::MeteoraDlmmT22(accounts) => meteora::append_dlmm(out, accounts),
             Self::MeteoraDammV2(accounts) => meteora::append_damm_v2(out, accounts),
             Self::MeteoraPools(accounts) => meteora::append_pools(out, accounts),
             Self::PumpfunAmm(accounts) => pumpfun::append_amm(out, accounts),
@@ -331,7 +333,6 @@ impl MarketAccounts {
                     pancakeswap::append(out, accounts);
                 }
             }
-            Self::MeteoraDlmmT22(accounts) => meteora::append_dlmm(out, accounts, true),
             Self::RaydiumClmmT22(accounts) => raydium::append_clmm_t22(out, accounts),
             Self::PancakeswapT22(accounts) => pancakeswap::append_t22(out, accounts),
             Self::OrcaWhirlpoolT22(accounts) => orca::append_whirlpool_t22(out, accounts),
@@ -392,12 +393,11 @@ fn account_count_for_market(market_id: MarketId) -> usize {
         MarketId::RaydiumCp => 9,
         MarketId::RaydiumClmm => 11,
         MarketId::OrcaWhirlpool => 9,
-        MarketId::MeteoraDlmm => 15,
+        MarketId::MeteoraDlmm => 16,
         MarketId::MeteoraDammV2 => 11,
         MarketId::MeteoraPools => 14,
         MarketId::PumpfunAmm => 24,
         MarketId::Pancakeswap => 11,
-        MarketId::MeteoraDlmmT22 => 16,
         MarketId::RaydiumClmmT22 => 15,
         MarketId::PancakeswapT22 => 15,
         MarketId::OrcaWhirlpoolT22 => 13,
@@ -456,6 +456,17 @@ fn required_t22_market_id(
             token_program_b: program_b,
         })
     }
+}
+
+fn required_swap2_market_id(
+    market: &'static str,
+    program_a: Pubkey,
+    program_b: Pubkey,
+    swap2: MarketId,
+) -> Result<MarketId, BuildError> {
+    validate_token_program(market, program_a)?;
+    validate_token_program(market, program_b)?;
+    Ok(swap2)
 }
 
 fn alphaq_market_id(program_left: Pubkey, program_right: Pubkey) -> Result<MarketId, BuildError> {

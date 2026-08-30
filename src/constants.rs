@@ -2,6 +2,7 @@ use solana_pubkey::Pubkey;
 
 pub const PROGRAM_ID: Pubkey = Pubkey::from_str_const("Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv");
 pub const FIND_ARB_V2_DISCRIMINATOR: u8 = 7;
+pub const FIND_ARB_V3_DISCRIMINATOR: u8 = 11;
 
 pub(crate) const FLAG_FLASHLOAN: u8 = 1 << 0;
 pub(crate) const FLAG_FAIL_IF_NO_PROFIT: u8 = 1 << 1;

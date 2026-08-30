@@ -1,4 +1,4 @@
-//! Pure client-side instruction builder for Prism `find_arb_v2`.
+//! Pure client-side instruction builders for Prism `find_arb_v2` and `find_arb_v3`.
 //!
 //! This crate does not discover routes, fetch accounts, derive user token
 //! accounts, create ATAs, choose lookup tables, build transactions, or submit
@@ -20,9 +20,9 @@ use crate::{
 };
 
 pub use constants::{
-    FEE_ATA_USD1, FEE_ATA_USDT, FEE_OWNER, FIND_ARB_V2_DISCRIMINATOR, PROGRAM_ID, SPL_ATA_PROGRAM,
-    SPL_TOKEN, SPL_TOKEN_2022, USDC_MINT, USD1_MINT, USDT_MINT, VAULT_ATA_USDC, VAULT_ATA_WSOL,
-    VAULT_AUTH, WSOL_MINT,
+    FEE_ATA_USD1, FEE_ATA_USDT, FEE_OWNER, FIND_ARB_V2_DISCRIMINATOR,
+    FIND_ARB_V3_DISCRIMINATOR, PROGRAM_ID, SPL_ATA_PROGRAM, SPL_TOKEN, SPL_TOKEN_2022, USDC_MINT,
+    USD1_MINT, USDT_MINT, VAULT_ATA_USDC, VAULT_ATA_WSOL, VAULT_AUTH, WSOL_MINT,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +50,25 @@ pub struct FindArbV2Params {
     /// produced-step cap for selected CL-family tick walks, then clamps it to
     /// each program-side capacity.
     pub max_dynamic_walk_steps: u8,
+    pub route_mints: Vec<MintAccount>,
+    pub pools: Vec<MarketAccounts>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FindArbV3Params {
+    pub signer: Pubkey,
+    pub base: MintAccount,
+    pub flashloan: bool,
+    pub fail_if_no_profit: bool,
+    /// Minimum realized profit floor in `base.mint` atomic units.
+    pub min_profit_base_units: u64,
+    /// Fallback dynamic-walk depth when V3 does not choose one from the CU budget.
+    pub max_dynamic_walk_steps: u8,
+    /// Nonzero compute-unit allowance for the Prism instruction alone.
+    ///
+    /// This is a caller assertion, not the transaction compute-unit limit or
+    /// Prism's actual remaining compute units.
+    pub prism_cu_budget: u32,
     pub route_mints: Vec<MintAccount>,
     pub pools: Vec<MarketAccounts>,
 }
@@ -87,9 +106,57 @@ pub enum BuildError {
         token_program_a: Pubkey,
         token_program_b: Pubkey,
     },
+    #[error("find_arb_v3 Prism CU budget must be nonzero")]
+    InvalidPrismCuBudget,
 }
 
 pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruction, BuildError> {
+    build_find_arb_instruction(FindArbInstructionParams {
+        discriminator: FIND_ARB_V2_DISCRIMINATOR,
+        signer: params.signer,
+        base: params.base,
+        flashloan: params.flashloan,
+        fail_if_no_profit: params.fail_if_no_profit,
+        min_profit_base_units: params.min_profit_base_units,
+        dynamic_walk_steps: params.max_dynamic_walk_steps,
+        prism_cu_budget: None,
+        route_mints: params.route_mints,
+        pools: params.pools,
+    })
+}
+
+pub fn build_find_arb_v3_instruction(params: FindArbV3Params) -> Result<Instruction, BuildError> {
+    if params.prism_cu_budget == 0 {
+        return Err(BuildError::InvalidPrismCuBudget);
+    }
+    build_find_arb_instruction(FindArbInstructionParams {
+        discriminator: FIND_ARB_V3_DISCRIMINATOR,
+        signer: params.signer,
+        base: params.base,
+        flashloan: params.flashloan,
+        fail_if_no_profit: params.fail_if_no_profit,
+        min_profit_base_units: params.min_profit_base_units,
+        dynamic_walk_steps: params.max_dynamic_walk_steps,
+        prism_cu_budget: Some(params.prism_cu_budget),
+        route_mints: params.route_mints,
+        pools: params.pools,
+    })
+}
+
+struct FindArbInstructionParams {
+    discriminator: u8,
+    signer: Pubkey,
+    base: MintAccount,
+    flashloan: bool,
+    fail_if_no_profit: bool,
+    min_profit_base_units: u64,
+    dynamic_walk_steps: u8,
+    prism_cu_budget: Option<u32>,
+    route_mints: Vec<MintAccount>,
+    pools: Vec<MarketAccounts>,
+}
+
+fn build_find_arb_instruction(params: FindArbInstructionParams) -> Result<Instruction, BuildError> {
     let fee_recipient_ata = prism_fee_recipient_ata(params.base.mint, params.base.token_program)?;
     validate_route_mints(params.base.mint, &params.route_mints)?;
     if params.pools.is_empty() {
@@ -106,13 +173,18 @@ pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruct
         .map(MarketAccounts::resolve)
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut data = Vec::with_capacity(13 + resolved_pools.len());
-    data.push(FIND_ARB_V2_DISCRIMINATOR);
+    let mut data = Vec::with_capacity(
+        13 + usize::from(params.prism_cu_budget.is_some()) * 4 + resolved_pools.len(),
+    );
+    data.push(params.discriminator);
     data.push(flags(params.flashloan, params.fail_if_no_profit));
-    data.push(params.max_dynamic_walk_steps);
+    data.push(params.dynamic_walk_steps);
     data.push(num_mints);
     data.push(num_pools);
     data.extend_from_slice(&params.min_profit_base_units.to_le_bytes());
+    if let Some(prism_cu_budget) = params.prism_cu_budget {
+        data.extend_from_slice(&prism_cu_budget.to_le_bytes());
+    }
     for pool in &resolved_pools {
         data.push(pool.market_id().as_u8());
     }

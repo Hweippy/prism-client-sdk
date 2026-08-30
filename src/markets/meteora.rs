@@ -64,7 +64,7 @@ pub struct MeteoraPoolsAccounts {
     pub vault_program: Pubkey,
 }
 
-pub(super) fn append_dlmm(out: &mut Vec<AccountMeta>, accounts: MeteoraDlmmAccounts, token_2022: bool) {
+pub(super) fn append_dlmm(out: &mut Vec<AccountMeta>, accounts: MeteoraDlmmAccounts) {
     push_w(out, accounts.lb_pair);
     push_w(out, accounts.bin_array_bitmap_ext);
     push_w(out, accounts.reserve_x);
@@ -75,9 +75,7 @@ pub(super) fn append_dlmm(out: &mut Vec<AccountMeta>, accounts: MeteoraDlmmAccou
     push_w(out, accounts.host_fee_in.unwrap_or(METEORA_DLMM));
     push_ro(out, accounts.token_x_program);
     push_ro(out, accounts.token_y_program);
-    if token_2022 {
-        push_ro(out, SPL_MEMO);
-    }
+    push_ro(out, SPL_MEMO);
     push_ro(out, METEORA_DLMM_EVENT_AUTHORITY);
     push_ro(out, METEORA_DLMM);
     push_w(out, accounts.bin_array_prev);
