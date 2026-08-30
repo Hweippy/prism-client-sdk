@@ -126,6 +126,7 @@ use prism_client_sdk::{
     markets::{
         meteora::MeteoraDlmmAccounts,
         pumpfun::PumpfunAmmAccounts,
+        raydium::RaydiumCpAccounts,
         MarketAccounts,
     },
 };
@@ -141,6 +142,7 @@ let ix = build_find_arb_v3_instruction(FindArbV3Params {
     route_mints,
     pools: vec![
         MarketAccounts::PumpfunAmm(PumpfunAmmAccounts { /* ... */ }),
+        MarketAccounts::RaydiumCp(RaydiumCpAccounts { /* ... */ }),
         MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
     ],
 })?;
