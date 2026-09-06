@@ -1522,5 +1522,46 @@ fn market_id_try_from_covers_current_range() {
     assert_eq!(MarketId::try_from(4), Err(BuildError::UnsupportedMarketId(4)));
     assert_eq!(MarketId::try_from(27), Err(BuildError::UnsupportedMarketId(27)));
     assert_eq!(MarketId::try_from(28).unwrap(), MarketId::GoonfiV2T22);
-    assert_eq!(MarketId::try_from(29), Err(BuildError::UnsupportedMarketId(29)));
+    assert_eq!(MarketId::try_from(29).unwrap(), MarketId::ByrealDynamic);
+    assert_eq!(MarketId::try_from(30), Err(BuildError::UnsupportedMarketId(30)));
+}
+
+#[test]
+fn byreal_dynamic_layout_is_mint_aware_in_all_token_program_combinations() {
+    for program_0 in [SPL_TOKEN, SPL_TOKEN_2022] {
+        for program_1 in [SPL_TOKEN, SPL_TOKEN_2022] {
+            let accounts = ByrealDynamicAccounts {
+                clmm: byreal_accounts(program_0, program_1),
+                token0_pyth_oracle: unique(31),
+                token1_pyth_oracle: unique(32),
+            };
+            let market = MarketAccounts::ByrealDynamic(accounts);
+            assert_eq!(market.try_market_id().unwrap(), MarketId::ByrealDynamic);
+            assert_eq!(market.try_account_count().unwrap(), 17);
+            let mut metas = Vec::new();
+            market.try_append_account_metas(&mut metas).unwrap();
+            assert_eq!(metas.len(), 17);
+            assert_eq!(metas[0], AccountMeta::new_readonly(accounts.clmm.amm_config, false));
+            assert_eq!(metas[2], AccountMeta::new(accounts.clmm.token_vault_0, false));
+            assert_eq!(metas[3], AccountMeta::new(accounts.clmm.token_vault_1, false));
+            assert_eq!(metas[5], AccountMeta::new_readonly(SPL_TOKEN, false));
+            assert_eq!(metas[6], AccountMeta::new_readonly(SPL_TOKEN_2022, false));
+            assert_eq!(metas[8], AccountMeta::new_readonly(accounts.clmm.token_mint_0, false));
+            assert_eq!(metas[9], AccountMeta::new_readonly(accounts.clmm.token_mint_1, false));
+            assert_eq!(metas[15], AccountMeta::new_readonly(unique(31), false));
+            assert_eq!(metas[16], AccountMeta::new_readonly(unique(32), false));
+            let v2 = build_find_arb_v2_instruction(params(market)).unwrap();
+            let v3 = build_find_arb_v3_instruction(v3_params(market, 500_000)).unwrap();
+            assert_eq!(&v2.accounts[v2.accounts.len()-17..], &metas);
+            assert_eq!(&v3.accounts[v3.accounts.len()-17..], &metas);
+        }
+    }
+    let bad = MarketAccounts::ByrealDynamic(ByrealDynamicAccounts {
+        clmm: byreal_accounts(unique(99), SPL_TOKEN),
+        token0_pyth_oracle: unique(31), token1_pyth_oracle: unique(32),
+    });
+    assert!(bad.try_market_id().is_err());
+    let mut metas = Vec::new();
+    assert!(bad.try_append_account_metas(&mut metas).is_err());
+    assert!(metas.is_empty());
 }

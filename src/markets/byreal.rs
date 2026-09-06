@@ -92,3 +92,18 @@ pub(super) fn append_clmm_t22(out: &mut Vec<AccountMeta>, accounts: ByrealClmmT2
         accounts.tick_array_next,
     );
 }
+
+/// Market 29: mint-aware Byreal accounts plus token-ordered Pyth PriceUpdateV2
+/// accounts. Use when the pool enables dynamic fees, including SPL/SPL pools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ByrealDynamicAccounts {
+    pub clmm: ByrealClmmAccounts,
+    pub token0_pyth_oracle: Pubkey,
+    pub token1_pyth_oracle: Pubkey,
+}
+
+pub(super) fn append_dynamic(out: &mut Vec<AccountMeta>, accounts: ByrealDynamicAccounts) {
+    append_clmm_t22_auto(out, accounts.clmm);
+    out.push(AccountMeta::new_readonly(accounts.token0_pyth_oracle, false));
+    out.push(AccountMeta::new_readonly(accounts.token1_pyth_oracle, false));
+}

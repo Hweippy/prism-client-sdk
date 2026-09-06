@@ -331,6 +331,7 @@ user ATA                 writable
 25 Tessera
 26 ZeroFi
 28 GoonfiV2T22
+29 ByrealDynamic
 ```
 
 These are wire IDs emitted by this SDK. Legacy DLMM wire ID 4 is intentionally not exposed: `MeteoraDlmm` always emits wire ID 9 and the 16-account `swap2` layout, including for SPL/SPL pools. The deprecated `MarketAccounts::MeteoraDlmmT22` and `MarketId::MeteoraDlmmT22` names remain source aliases for the same wire ID 9 and layout; they do not emit ID 4.
@@ -838,3 +839,18 @@ Arb outcome and execution errors:
 | `InvalidPrismCuBudget` | `FindArbV3Params.prism_cu_budget` is zero. | Supply a nonzero Prism-only CU allowance. Use V2 if the caller cannot provide one. |
 
 The SDK does not validate account existence, token account ownership, pool state, pool endpoint mints, route profitability, lookup table fit, compute budget, or transaction account-lock count. Those checks belong to the caller's indexer, simulator, transaction builder, or Prism itself.
+
+### Byreal dynamic fees
+
+Use `MarketAccounts::ByrealDynamic(ByrealDynamicAccounts { clmm, token0_pyth_oracle,
+token1_pyth_oracle })` for pools with `decay_fee_flag & 0x10 != 0`. `clmm` is the
+existing `ByrealClmmAccounts` struct, including both endpoint token programs.
+This always emits market **29** and **17 accounts**, including for SPL/SPL pools.
+The first 15 slots are the mint-aware CLMM layout; the final two are read-only
+Pyth PriceUpdateV2 accounts in pool token0/token1 order, independent of direction.
+
+Both token programs are checked. Callers resolve oracle accounts matching the
+pool's feed IDs and ensure they are updated; the SDK does not fetch pool/oracle
+state. Prism validates the oracle identity and freshness on chain. Existing
+`ByrealClmm` selection continues emitting legacy 13/14 and cannot represent
+dynamic-fee pools. Market 29 requires the Prism deployment supporting this layout.

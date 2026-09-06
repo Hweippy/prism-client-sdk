@@ -40,6 +40,7 @@ pub enum MarketId {
     OrcaWhirlpoolT22 = 12,
     ByrealClmm = 13,
     ByrealClmmT22 = 14,
+    ByrealDynamic = 29,
     HumidifiSwapV2 = 15,
     HumidifiSwap = 16,
     Manifest = 17,
@@ -83,6 +84,7 @@ impl MarketId {
             Self::OrcaWhirlpoolT22 => "OrcaWhirlpoolT22",
             Self::ByrealClmm => "ByrealClmm",
             Self::ByrealClmmT22 => "ByrealClmmT22",
+            Self::ByrealDynamic => "ByrealDynamic",
             Self::HumidifiSwapV2 => "HumidifiSwapV2",
             Self::HumidifiSwap => "HumidifiSwap",
             Self::Manifest => "Manifest",
@@ -119,6 +121,7 @@ impl TryFrom<u8> for MarketId {
             12 => Ok(Self::OrcaWhirlpoolT22),
             13 => Ok(Self::ByrealClmm),
             14 => Ok(Self::ByrealClmmT22),
+            29 => Ok(Self::ByrealDynamic),
             15 => Ok(Self::HumidifiSwapV2),
             16 => Ok(Self::HumidifiSwap),
             17 => Ok(Self::Manifest),
@@ -166,6 +169,7 @@ pub enum MarketAccounts {
     )]
     OrcaWhirlpoolT22(orca::OrcaWhirlpoolT22Accounts),
     ByrealClmm(byreal::ByrealClmmAccounts),
+    ByrealDynamic(byreal::ByrealDynamicAccounts),
     #[deprecated(
         note = "legacy forced-T22 alias without token-program fields; use ByrealClmm for checked automatic selection"
     )]
@@ -269,6 +273,12 @@ impl MarketAccounts {
                 MarketId::ByrealClmm,
                 MarketId::ByrealClmmT22,
             )?,
+            Self::ByrealDynamic(accounts) => required_swap2_market_id(
+                "ByrealDynamic",
+                accounts.clmm.token_program_0,
+                accounts.clmm.token_program_1,
+                MarketId::ByrealDynamic,
+            )?,
             Self::ByrealClmmT22(_) => MarketId::ByrealClmmT22,
             Self::HumidifiSwapV2(_) => MarketId::HumidifiSwapV2,
             Self::HumidifiSwap(_) => MarketId::HumidifiSwap,
@@ -344,6 +354,7 @@ impl MarketAccounts {
                 }
             }
             Self::ByrealClmmT22(accounts) => byreal::append_clmm_t22(out, accounts),
+            Self::ByrealDynamic(accounts) => byreal::append_dynamic(out, accounts),
             Self::HumidifiSwapV2(accounts) => humidifi::append_swap_v2(out, accounts),
             Self::HumidifiSwap(accounts) => humidifi::append_swap(out, accounts),
             Self::Manifest(accounts) => manifest::append(out, accounts),
@@ -403,6 +414,7 @@ fn account_count_for_market(market_id: MarketId) -> usize {
         MarketId::OrcaWhirlpoolT22 => 13,
         MarketId::ByrealClmm => 11,
         MarketId::ByrealClmmT22 => 15,
+        MarketId::ByrealDynamic => 17,
         MarketId::HumidifiSwapV2 => 10,
         MarketId::HumidifiSwap => 7,
         MarketId::Manifest => 7,
