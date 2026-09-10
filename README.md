@@ -51,7 +51,7 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 ## Route Shape
 
-`find_arb_v4` supports up to 3-hop arbitrage. It does not build or execute routes with more than three swap legs.
+Prism supports up to 3-hop arbitrage. It does not build or execute routes with more than three swap legs.
 
 The `base` mint and `route_mints` fields have the same meaning for both shapes. `base` is the cycle's base token, and `route_mints` contains every non-base mint the submitted pool graph may touch. For a 2-hop route, that is usually one target mint. For a 3-hop route, include both non-base mints in the triangle.
 
