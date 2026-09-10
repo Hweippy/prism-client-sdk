@@ -854,3 +854,23 @@ pool's feed IDs and ensure they are updated; the SDK does not fetch pool/oracle
 state. Prism validates the oracle identity and freshness on chain. Existing
 `ByrealClmm` selection continues emitting legacy 13/14 and cannot represent
 dynamic-fee pools. Market 29 requires the Prism deployment supporting this layout.
+
+### Unified FindArb V4
+
+Use `build_find_arb_v4_instruction(FindArbV4Params { ... })` for discriminator
+13. `prism_cu_budget: 0` disables autosizing and uses `max_dynamic_walk_steps`
+manually; a nonzero budget enables autosizing, retaining that byte as fallback
+for unsupported routes. The allowance covers Prism alone and is not a guarantee
+that execution fits the transaction CU limit.
+
+Set `extra_fee: Some(ExtraFee { token_account, bps })` to add a third-party fee,
+or `None` to omit it. The destination must already be a writable initialized
+base-mint token account. The builder sets bit 2, writes the u16 BPS after the
+budget, and inserts the account after the existing settlement prefix (index 6
+with flashloan, index 5 without). It rejects settlement aliases and rates outside
+1..=8999, given Prism's configured 1000 BPS fee.
+
+Both fees independently round down on the same realized profit basis, including
+actual base-mint cashback and the applicable minimum-profit deduction. Prism's
+fee remains intact; an exemption from Prism's fee does not waive the extra fee.
+Both fees and any principal must be paid in full or execution reverts.

@@ -25,3 +25,6 @@ pub const SPL_ATA_PROGRAM: Pubkey = Pubkey::from_str_const("ATokenGPvbdGVxr1b2hv
 pub(crate) const SYSTEM_PROGRAM: Pubkey = Pubkey::from_str_const("11111111111111111111111111111111");
 pub(crate) const SYSVAR_CLOCK: Pubkey = Pubkey::from_str_const("SysvarC1ock11111111111111111111111111111111");
 pub(crate) const SYSVAR_INSTRUCTIONS: Pubkey = Pubkey::from_str_const("Sysvar1nstructions1111111111111111111111111");
+
+/// Unified manual/autosized arbitrage with an optional additive fee.
+pub const FIND_ARB_V4_DISCRIMINATOR: u8 = 13;

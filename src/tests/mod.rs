@@ -1565,3 +1565,55 @@ fn byreal_dynamic_layout_is_mint_aware_in_all_token_program_combinations() {
     assert!(bad.try_append_account_metas(&mut metas).is_err());
     assert!(metas.is_empty());
 }
+
+fn v4_params(budget: u32, extra_fee: Option<ExtraFee>, flashloan: bool) -> FindArbV4Params {
+    let p = v3_params(futarchy(1), budget);
+    FindArbV4Params {
+        signer: p.signer, base: p.base, flashloan,
+        fail_if_no_profit: p.fail_if_no_profit,
+        min_profit_base_units: p.min_profit_base_units,
+        max_dynamic_walk_steps: p.max_dynamic_walk_steps,
+        prism_cu_budget: budget, extra_fee, route_mints: p.route_mints, pools: p.pools,
+    }
+}
+
+#[test]
+fn v4_wire_and_account_matrix() {
+    for flashloan in [false, true] {
+        for budget in [0u32, 500_000] {
+            for extra in [None, Some(ExtraFee { token_account: unique(211), bps: 250 })] {
+                let mut old = params(futarchy(1));
+                old.flashloan = flashloan;
+                let old = build_find_arb_v2_instruction(old).unwrap();
+                let ix = build_find_arb_v4_instruction(v4_params(budget, extra, flashloan)).unwrap();
+                assert_eq!(ix.data[0], 13);
+                assert_eq!(ix.data[1], old.data[1] | if extra.is_some() { 4 } else { 0 });
+                assert_eq!(&ix.data[2..13], &old.data[2..13]);
+                assert_eq!(&ix.data[13..17], &budget.to_le_bytes());
+                let mut expected_accounts = old.accounts;
+                let start = if let Some(extra) = extra {
+                    assert_eq!(&ix.data[17..19], &250u16.to_le_bytes());
+                    expected_accounts.insert(5 + usize::from(flashloan), AccountMeta::new(extra.token_account, false));
+                    19
+                } else { 17 };
+                assert_eq!(&ix.data[start..], &old.data[13..]);
+                assert_eq!(ix.accounts, expected_accounts);
+            }
+        }
+    }
+}
+
+#[test]
+fn v4_rejects_invalid_extra_fees() {
+    for bps in [0, 9000, 10_000, u16::MAX] {
+        let p = v4_params(0, Some(ExtraFee { token_account: unique(211), bps }), true);
+        assert_eq!(build_find_arb_v4_instruction(p), Err(BuildError::InvalidExtraFeeBps));
+    }
+    for token_account in [base().user_ata, VAULT_ATA_WSOL] {
+        let p = v4_params(0, Some(ExtraFee { token_account, bps: 250 }), true);
+        assert_eq!(build_find_arb_v4_instruction(p), Err(BuildError::InvalidExtraFeeAccount));
+    }
+    assert!(build_find_arb_v4_instruction(v4_params(0, Some(ExtraFee {
+        token_account: unique(211), bps: 8999,
+    }), true)).is_ok());
+}
