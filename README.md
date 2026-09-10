@@ -1,10 +1,10 @@
 # prism-client-sdk
 
-Self-contained Rust builders for Prism `find_arb_v4` instructions, with optional CU-based walk sizing and additive third-party fees.
+Self-contained Rust builders for Prism `find_arb_v4` instructions with CU-based walk sizing.
 
-Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb_v4` for both manual and budget-based walk sizing, with an optional extra fee recipient. V4 requires a program deployment supporting discriminator 13.
+Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb_v4` for budget-based walk sizing with optional manual control.
 
-Earlier versions remain available for compatibility: V2 provided manual walk-depth control; V3 added a required nonzero CU budget for eligible Pump/DLMM autosizing. V4 unifies these modes and adds optional third-party fees.
+Earlier versions remain available for compatibility: V2 provided manual walk-depth control; V3 added a required nonzero CU budget for eligible Pump/DLMM autosizing. V4 unifies these sizing modes.
 
 <img width="600" height="150" alt="image" src="https://github.com/user-attachments/assets/be89d44a-f0c2-4b20-9573-dfe07a691a23" />
 
@@ -61,9 +61,9 @@ The `base` mint and `route_mints` fields have the same meaning for both shapes. 
 
 The SDK does no account discovery. With the required pubkeys in scope, put them into the typed parameters:
 
-### V4: manual walk depth
+### V4: autosizing
 
-With `prism_cu_budget: None`, `max_dynamic_walk_steps` controls dynamic liquidity walks on the selected route. It caps Meteora DLMM bin scans and Raydium CLMM, Orca Whirlpool, PancakeSwap, and Byreal tick-walk steps per direction; constant-product pools do not use it. Higher values can reach deeper liquidity but use more compute, while lower values save compute but can miss deeper routes.
+Set `prism_cu_budget: Some(nonzero_budget)` to enable autosizing for eligible Pump/DLMM winners. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
 
 ```rust
 use prism_client_sdk::{
@@ -92,7 +92,7 @@ let ix = build_find_arb_v4_instruction(FindArbV4Params {
     fail_if_no_profit: true,
     min_profit_base_units: 10_000,
     max_dynamic_walk_steps: 12,
-    prism_cu_budget: None,
+    prism_cu_budget: Some(320_000),
     extra_fee: None,
     route_mints: vec![MintAccount {
         mint: USDC_MINT,
@@ -120,45 +120,16 @@ let ix = build_find_arb_v4_instruction(FindArbV4Params {
 
 This builds a two-pool menu for a 2-hop candidate. The SDK assembles the instruction; the caller chooses pools whose endpoint mints match `base` and `route_mints`.
 
-### V4: budget-based walk sizing and an extra fee
+To disable autosizing, set `prism_cu_budget: None` (or `Some(0)`); `max_dynamic_walk_steps` then controls the manual tick/bin walk depth.
 
-Set `prism_cu_budget: Some(nonzero_budget)` to enable autosizing for eligible Pump/DLMM winners. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps`.
-
-The optional `extra_fee` below adds a 250 BPS (2.5%) fee on the same realized profit basis as Prism. Supply an existing base-mint token account as `fee_token_account`; use `extra_fee: None` to omit it. Fee selection is independent of autosizing.
+To add a third-party fee on the same realized profit basis as Prism, replace `extra_fee: None` with the following field, using an existing base-mint token account:
 
 ```rust
-use prism_client_sdk::{
-    build_find_arb_v4_instruction, ExtraFee, FindArbV4Params,
-    markets::{
-        meteora::MeteoraDlmmAccounts,
-        pumpfun::PumpfunAmmAccounts,
-        raydium::RaydiumCpAccounts,
-        MarketAccounts,
-    },
-};
-
-let ix = build_find_arb_v4_instruction(FindArbV4Params {
-    signer,
-    base,
-    flashloan: true,
-    fail_if_no_profit: true,
-    min_profit_base_units: 10_000,
-    max_dynamic_walk_steps: 12,
-    prism_cu_budget: Some(320_000),
-    extra_fee: Some(ExtraFee {
-        token_account: fee_token_account,
-        bps: 250,
-    }),
-    route_mints,
-    pools: vec![
-        MarketAccounts::PumpfunAmm(PumpfunAmmAccounts { /* ... */ }),
-        MarketAccounts::RaydiumCp(RaydiumCpAccounts { /* ... */ }),
-        MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts { /* ... */ }),
-    ],
-})?;
+extra_fee: Some(prism_client_sdk::ExtraFee {
+    token_account: fee_token_account,
+    bps: 250, // 2.5%, in addition to Prism's fee
+}),
 ```
-
-Both V4 sizing modes accept the same unordered pool menu and support 2-hop and 3-hop routes. The optional extra fee adds one account to the settlement prefix.
 
 ### Three-hop pool menu
 
