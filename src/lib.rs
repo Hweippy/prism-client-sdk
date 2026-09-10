@@ -91,11 +91,12 @@ pub struct FindArbV4Params {
     pub min_profit_base_units: u64,
     /// Fallback dynamic-walk depth when V4 does not choose one from the CU budget.
     pub max_dynamic_walk_steps: u8,
-    /// Compute-unit allowance for Prism alone; zero disables autosizing.
+    /// Compute-unit allowance for Prism alone; None disables autosizing.
+    /// Some(0) also encodes the disabled wire value.
     ///
     /// This is a caller assertion, not the transaction compute-unit limit or
     /// Prism's actual remaining compute units.
-    pub prism_cu_budget: u32,
+    pub prism_cu_budget: Option<u32>,
     /// Optional additive fee on the same realized profit basis as Prism.
     pub extra_fee: Option<ExtraFee>,
     pub route_mints: Vec<MintAccount>,
@@ -187,7 +188,7 @@ pub fn build_find_arb_v4_instruction(params: FindArbV4Params) -> Result<Instruct
         fail_if_no_profit: params.fail_if_no_profit,
         min_profit_base_units: params.min_profit_base_units,
         dynamic_walk_steps: params.max_dynamic_walk_steps,
-        prism_cu_budget: Some(params.prism_cu_budget),
+        prism_cu_budget: Some(params.prism_cu_budget.unwrap_or(0)),
         extra_fee: params.extra_fee,
         route_mints: params.route_mints,
         pools: params.pools,
