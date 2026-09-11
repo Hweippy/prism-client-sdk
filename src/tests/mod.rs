@@ -612,7 +612,7 @@ fn tessera_emits_public_swap_account_slice() {
     market.try_append_account_metas(&mut metas).unwrap();
 
     assert_eq!(market.try_market_id().unwrap(), MarketId::Tessera);
-    assert_eq!(market.try_account_count().unwrap(), 8);
+    assert_eq!(market.try_account_count().unwrap(), 10);
     assert_eq!(
         metas,
         vec![
@@ -624,6 +624,8 @@ fn tessera_emits_public_swap_account_slice() {
             AccountMeta::new_readonly(accounts.mint_b, false),
             AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS, false),
             AccountMeta::new_readonly(TESSERA, false),
+            AccountMeta::new_readonly(TESSERA_BAT, false),
+            AccountMeta::new_readonly(TESSERA_TICK, false),
         ]
     );
 }

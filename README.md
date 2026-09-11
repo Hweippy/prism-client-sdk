@@ -789,9 +789,15 @@ Prism does not scout or execute the reverse mint B -> mint A edge.
 5      mint_b                             caller
 6      instructions sysvar                SDK constant
 7      Tessera program                    SDK constant
+8      BAT state                          SDK constant
+9      tick state                         SDK constant
 ```
 
-Tessera uses the public opcode `0x10` path. The instructions sysvar is quote-critical because
+Tessera uses the public opcode `0x10` path with 14 CPI accounts. The SDK emits the
+10-account Prism slice, automatically appending readonly BAT and tick state.
+This layout requires the Prism Tessera V2 migration; update the deployed Prism
+program before switching senders to this SDK. BAT, tick, and global state affect
+profile selection and fees. The instructions sysvar is quote-critical because
 Tessera scans top-level instruction program ids to determine whether its pool fee is waived. The
 alternate router-profile opcode `0x11` is intentionally not part of Prism's adapter contract.
 

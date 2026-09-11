@@ -425,7 +425,7 @@ fn account_count_for_market(market_id: MarketId) -> usize {
         MarketId::FutarchySpot => 5,
         MarketId::Fusion => 14,
         MarketId::BisonFi => 7,
-        MarketId::Tessera => 8,
+        MarketId::Tessera => 10,
         MarketId::ZeroFi => 10,
         MarketId::GoonfiV2T22 => 11,
     }
