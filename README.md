@@ -4,7 +4,15 @@ Self-contained Rust builders for Prism `find_arb_v4` instructions with CU-based 
 
 Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb_v4` for budget-based walk sizing with optional manual control.
 
-Earlier versions remain available for compatibility: V2 provided manual walk-depth control; V3 added a required nonzero CU budget for eligible Pump/DLMM autosizing. V4 unifies these sizing modes.
+The SDK exposes one arbitrage builder, `build_find_arb_instruction(FindArbParams)`, which always emits the V4 wire format (discriminator 13). The versioned builders and parameter types have been removed; existing callers must migrate to these names. Manual sizing and autosizing use the same entry point.
+
+`FindArbParams::new(signer, base, route_mints, pools)` requires the account inputs and initializes the execution settings. Callers can override individual settings before building the instruction.
+
+```rust
+let mut params = FindArbParams::new(signer, base, route_mints, pools);
+params.prism_cu_budget = Some(300_000);
+let ix = build_find_arb_instruction(params)?;
+```
 
 <img width="600" height="150" alt="image" src="https://github.com/user-attachments/assets/be89d44a-f0c2-4b20-9573-dfe07a691a23" />
 
@@ -14,6 +22,7 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 - [Supported Programs](#supported-programs)
 - [Route Shape](#route-shape)
+- [Arguments and Defaults](#arguments-and-defaults)
 - [Rust Examples](#rust-examples)
 - [Instruction Data](#instruction-data)
 - [Settlement Accounts](#settlement-accounts)
@@ -57,6 +66,25 @@ The `base` mint and `route_mints` fields have the same meaning for both shapes. 
 
 `pools` is an unordered pool menu, not an ordered route. Prism reads each pool's endpoint mints on-chain, builds the candidate graph, and chooses the executable route order itself. Pools that touch `base` can become direct edges for 2-hop routes. Pools that do not touch `base`, but connect two submitted `route_mints`, can become the middle bridge edge of a 3-hop route. Submitting bridge pools for possible 3-hop routes does not disable 2-hop evaluation; Prism evaluates direct 2-hop candidates from the same pool menu when matching base-touching pools are present. The order of `pools` only controls instruction serialization; it does not force route execution order.
 
+## Arguments and Defaults
+
+`FindArbParams::new(signer, base, route_mints, pools)` takes four required arguments. Optional settings below are initialized by the constructor and can be changed through the public fields before building the instruction.
+
+| Argument | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `signer` | `Pubkey` | Required | Signer and owner of the supplied user token accounts. |
+| `base` | `MintAccount` | Required | Base mint, token program, and signer's base token account. |
+| `route_mints` | `Vec<MintAccount>` | Required | Nonempty list of unique non-base target/bridge mints and user token accounts. |
+| `pools` | `Vec<MarketAccounts>` | Required | Nonempty unordered pool menu for on-chain route selection. |
+| `flashloan` | `bool` | `true` | Borrow from Prism's base vault. Disable for USDT/USD1; flashloans support WSOL/USDC only. |
+| `fail_if_no_profit` | `bool` | `true` | Fail when no profitable execution occurs. |
+| `min_profit_base_units` | `u64` | `0` | Minimum realized profit in base-mint atomic units; does not automatically cover transaction fees or tips. |
+| `max_dynamic_walk_steps` | `u8` | `20` | Manual/fallback tick or bin walk depth. |
+| `prism_cu_budget` | `Option<u32>` | `None` | Prism-only CU allowance; nonzero enables autosizing. `None` or `Some(0)` disables it. |
+| `extra_fee` | `Option<ExtraFee>` | `None` | Optional additive fee, separate from Prism's own fee. |
+
+Each `MintAccount` requires `mint`, `token_program`, and `user_ata` (all `Pubkey`). When supplied, `ExtraFee` requires `token_account: Pubkey` (an initialized base-mint token account) and `bps: u16` (`1..=8999`). The constructor stores the inputs; `build_find_arb_instruction` performs SDK validation.
+
 ## Rust Examples
 
 The SDK does no account discovery. With the required pubkeys in scope, put them into the typed parameters:
@@ -65,9 +93,21 @@ The SDK does no account discovery. With the required pubkeys in scope, put them 
 
 Set `prism_cu_budget: Some(nonzero_budget)` to enable autosizing for eligible Pump/DLMM winners. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
 
+Set the allowance to roughly **the transaction CU limit minus the compute needed by all other instructions**, with some extra headroom:
+
+```text
+prism_cu_budget = transaction_cu_limit - non_prism_cu_reserve - safety_margin
+```
+
+Reserve compute for instructions both before and after Prism, such as account creation, token transfers, and tip payments. Estimate their cost from simulation or representative transaction logs, allowing for variation. DEX swaps and other CPIs invoked by Prism are part of Prism's allowance; do not subtract them as separate instructions.
+
+For example, with a transaction limit of **400,000 CU**, a **60,000 CU** reserve for other instructions, and **20,000 CU** of headroom, set `params.prism_cu_budget = Some(320_000)`. These are illustrative values; choose the reserve and margin for your transaction composition.
+
+Set the transaction's compute-unit limit separately. This parameter tells Prism how much compute to plan around; it does not raise the transaction limit or guarantee execution will fit. If the subtraction leaves no positive allowance, increase the transaction budget or reduce the other work; `Some(0)` disables autosizing rather than imposing a zero-CU cap.
+
 ```rust
 use prism_client_sdk::{
-    build_find_arb_v4_instruction, FindArbV4Params, MintAccount,
+    build_find_arb_instruction, FindArbParams, MintAccount,
     markets::{
         meteora::MeteoraDlmmAccounts,
         raydium::{RaydiumCpAccounts, RaydiumV4Accounts},
@@ -81,25 +121,19 @@ const USDC_MINT: Pubkey = Pubkey::from_str_const("EPjFWdd5AufqSSqeM2qN1xzybapC8G
 const TRUMP_MINT: Pubkey = Pubkey::from_str_const("6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN");
 const SPL_TOKEN: Pubkey = Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
-let ix = build_find_arb_v4_instruction(FindArbV4Params {
+let mut params = FindArbParams::new(
     signer,
-    base: MintAccount {
+    MintAccount {
         mint: WSOL_MINT,
         token_program: SPL_TOKEN,
         user_ata: wsol_user_ata,
     },
-    flashloan: true,
-    fail_if_no_profit: true,
-    min_profit_base_units: 10_000,
-    max_dynamic_walk_steps: 12,
-    prism_cu_budget: Some(320_000),
-    extra_fee: None,
-    route_mints: vec![MintAccount {
+    vec![MintAccount {
         mint: USDC_MINT,
         token_program: SPL_TOKEN,
         user_ata: usdc_user_ata,
     }],
-    pools: vec![
+    vec![
         MarketAccounts::RaydiumV4(RaydiumV4Accounts {
             pool_state: Pubkey::from_str_const("58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"),
             coin_vault: Pubkey::from_str_const("DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz"),
@@ -115,20 +149,24 @@ let ix = build_find_arb_v4_instruction(FindArbV4Params {
             observation_state: Pubkey::from_str_const("AwXcFysn5vntDyiGo9hXDhTMFSg2in7hxj8ED51oZgqo"),
         }),
     ],
-})?;
+);
+params.min_profit_base_units = 10_000;
+params.max_dynamic_walk_steps = 12;
+params.prism_cu_budget = Some(320_000);
+let ix = build_find_arb_instruction(params)?;
 ```
 
 This builds a two-pool menu for a 2-hop candidate. The SDK assembles the instruction; the caller chooses pools whose endpoint mints match `base` and `route_mints`.
 
-To disable autosizing, set `prism_cu_budget: None` (or `Some(0)`); `max_dynamic_walk_steps` then controls the manual tick/bin walk depth.
+To disable autosizing, set `params.prism_cu_budget = None` (or `Some(0)`); `max_dynamic_walk_steps` then controls the manual tick/bin walk depth.
 
-To add a third-party fee on the same realized profit basis as Prism, replace `extra_fee: None` with the following field, using an existing base-mint token account:
+To add a third-party fee on the same realized profit basis as Prism, set the following before calling `build_find_arb_instruction`, using an existing base-mint token account:
 
 ```rust
-extra_fee: Some(prism_client_sdk::ExtraFee {
+params.extra_fee = Some(prism_client_sdk::ExtraFee {
     token_account: fee_token_account,
     bps: 250, // 2.5%, in addition to Prism's fee
-}),
+});
 ```
 
 ### Three-hop pool menu
@@ -343,7 +381,7 @@ These are wire IDs emitted by this SDK. Legacy DLMM wire ID 4 is intentionally n
 
 ## Market Accounts
 
-Callers pass `FindArbV4Params` with `pools: Vec<MarketAccounts>`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the wire market ID, inserts Prism's fixed program IDs, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
+Callers pass `FindArbParams` with `pools: Vec<MarketAccounts>`, where `MarketAccounts` lives under `prism_client_sdk::markets`. Each variant wraps a market-specific struct from its family module, such as `markets::raydium::RaydiumV4Accounts` or `markets::meteora::MeteoraDlmmAccounts`, with only the dynamic pubkeys the caller must know. The SDK derives the wire market ID, inserts Prism's fixed program IDs, authorities, sysvars, event authorities, and token-program constants, then emits the full remaining-account list in Prism's order with the correct writable/readonly flags.
 
 There is no separate market id field to keep in sync with a raw pubkey slice. If the variant is `MarketAccounts::RaydiumV4`, the instruction data receives market id `0` and the Raydium v4 account layout is emitted.
 
@@ -392,7 +430,7 @@ All other fields are required. The SDK does not invent dynamic pool accounts, de
 
 ## Emitted Pool Slices
 
-The SDK emits each pool as one contiguous account slice. The slice order must match the `MarketAccounts` variant order in `FindArbV4Params.pools`, because Prism slices the remaining accounts by the emitted `market_ids`.
+The SDK emits each pool as one contiguous account slice. The slice order must match the `MarketAccounts` variant order in `FindArbParams.pools`, because Prism slices the remaining accounts by the emitted `market_ids`.
 
 Legend:
 
@@ -843,7 +881,7 @@ Arb outcome and execution errors:
 | `UnsupportedFlashloanBaseMint(pubkey)` | `flashloan = true` and the `base.mint` is not WSOL or USDC. | Disable flashloan for USDT/USD1 routes, or use a WSOL/USDC base mint with an initialized and funded Prism vault. |
 | `RouteMintCountOverflow(count)` | `route_mints.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |
 | `MissingRouteMints` | `route_mints` is empty. | Prism needs at least one route mint header to map pool endpoints to user token accounts. Add one `MintAccount` for each target or bridge mint used by the pool graph. |
-| `BaseMintInRouteMints(pubkey)` | A route mint entry repeats `base.mint`. | The base mint is already represented by `FindArbV4Params.base`; remove it from `route_mints`. |
+| `BaseMintInRouteMints(pubkey)` | A route mint entry repeats `base.mint`. | The base mint is already represented by `FindArbParams.base`; remove it from `route_mints`. |
 | `DuplicateRouteMint(pubkey)` | The same route mint appears more than once. | Deduplicate by mint pubkey and keep the matching token program plus user ATA in the remaining `MintAccount`. |
 | `MissingPools` | `pools` is empty. | Add at least one `MarketAccounts` variant. The SDK does not infer pools from mints or route intent. |
 | `PoolCountOverflow(count)` | `pools.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |

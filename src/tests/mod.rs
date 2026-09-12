@@ -29,35 +29,30 @@ fn futarchy(seed: u8) -> MarketAccounts {
     })
 }
 
-fn params(pool: MarketAccounts) -> FindArbV2Params {
-    FindArbV2Params {
-        signer: unique(200),
-        base: base(),
-        flashloan: true,
-        fail_if_no_profit: true,
-        min_profit_base_units: 12_345,
-        max_dynamic_walk_steps: 24,
-        route_mints: vec![MintAccount {
+fn params(pool: MarketAccounts) -> FindArbParams {
+    let mut params = FindArbParams::new(
+        unique(200),
+        base(),
+        vec![MintAccount {
             mint: unique(202),
             token_program: spl_token_interface::ID,
             user_ata: unique(203),
         }],
-        pools: vec![pool],
-    }
+        vec![pool],
+    );
+    params.flashloan = true;
+    params.fail_if_no_profit = true;
+    params.min_profit_base_units = 12_345;
+    params.max_dynamic_walk_steps = 24;
+    params.prism_cu_budget = None;
+    params.extra_fee = None;
+    params
 }
 
-fn v3_params(pool: MarketAccounts, prism_cu_budget: u32) -> FindArbV3Params {
-    let params = params(pool);
-    FindArbV3Params {
-        signer: params.signer,
-        base: params.base,
-        flashloan: params.flashloan,
-        fail_if_no_profit: params.fail_if_no_profit,
-        min_profit_base_units: params.min_profit_base_units,
-        max_dynamic_walk_steps: params.max_dynamic_walk_steps,
-        prism_cu_budget,
-        route_mints: params.route_mints,
-        pools: params.pools,
+fn autosized_params(pool: MarketAccounts, prism_cu_budget: u32) -> FindArbParams {
+    FindArbParams {
+        prism_cu_budget: Some(prism_cu_budget),
+        ..params(pool)
     }
 }
 
@@ -177,16 +172,17 @@ fn goonfi_accounts(token_program_a: Pubkey, token_program_b: Pubkey) -> GoonfiV2
 }
 
 #[test]
-fn builds_find_arb_v2_header_and_prefix() {
-    let ix = build_find_arb_v2_instruction(params(MarketAccounts::RaydiumV4(RaydiumV4Accounts {
+fn builds_manual_v4_header_and_prefix() {
+    let ix = build_find_arb_instruction(params(MarketAccounts::RaydiumV4(RaydiumV4Accounts {
         pool_state: unique(1),
         coin_vault: unique(2),
         pc_vault: unique(3),
     })))
     .unwrap();
 
-    let mut expected_data = vec![7, 0b0000_0011, 24, 1, 1];
+    let mut expected_data = vec![13, 0b0000_0011, 24, 1, 1];
     expected_data.extend_from_slice(&12_345u64.to_le_bytes());
+    expected_data.extend_from_slice(&0u32.to_le_bytes());
     expected_data.push(MarketId::RaydiumV4.as_u8());
     assert_eq!(ix.program_id, PROGRAM_ID);
     assert_eq!(ix.data, expected_data);
@@ -206,58 +202,39 @@ fn builds_find_arb_v2_header_and_prefix() {
 }
 
 #[test]
-fn builds_find_arb_v3_exact_header_and_preserves_v2_accounts() {
+fn builds_autosized_v4_header_and_preserves_manual_accounts() {
     let market = MarketAccounts::RaydiumV4(RaydiumV4Accounts {
         pool_state: unique(1),
         coin_vault: unique(2),
         pc_vault: unique(3),
     });
-    let v2_ix = build_find_arb_v2_instruction(params(market)).unwrap();
-    let v3_ix = build_find_arb_v3_instruction(v3_params(market, 0x0d0c_0b0a)).unwrap();
+    let manual_ix = build_find_arb_instruction(params(market)).unwrap();
+    let autosized_ix = build_find_arb_instruction(autosized_params(market, 0x0d0c_0b0a)).unwrap();
 
-    let mut expected_data = vec![11, 0b0000_0011, 24, 1, 1];
+    let mut expected_data = vec![13, 0b0000_0011, 24, 1, 1];
     expected_data.extend_from_slice(&12_345u64.to_le_bytes());
     expected_data.extend_from_slice(&0x0d0c_0b0au32.to_le_bytes());
     expected_data.push(MarketId::RaydiumV4.as_u8());
-    assert_eq!(v3_ix.data, expected_data);
-    assert_eq!(v3_ix.accounts, v2_ix.accounts);
-}
-
-#[test]
-fn find_arb_v3_rejects_zero_budget_before_other_validation() {
-    let mut params = v3_params(
-        MarketAccounts::RaydiumV4(RaydiumV4Accounts {
-            pool_state: unique(1),
-            coin_vault: unique(2),
-            pc_vault: unique(3),
-        }),
-        0,
-    );
-    params.route_mints.clear();
-    params.pools.clear();
-
-    assert_eq!(
-        build_find_arb_v3_instruction(params),
-        Err(BuildError::InvalidPrismCuBudget)
-    );
+    assert_eq!(autosized_ix.data, expected_data);
+    assert_eq!(autosized_ix.accounts, manual_ix.accounts);
 }
 
 #[test]
 fn builder_automatically_selects_alphaq_token2022_wire_variant() {
-    let ix = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+    let ix = build_find_arb_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
         SPL_TOKEN_2022,
         SPL_TOKEN,
     ))))
     .unwrap();
 
-    assert_eq!(ix.data[13], MarketId::AlphaQT22.as_u8());
+    assert_eq!(ix.data[17], MarketId::AlphaQT22.as_u8());
     assert_eq!(ix.accounts.len(), 8 + 10);
 }
 
 #[test]
 fn builder_rejects_unknown_market_token_program() {
     let token_program = unique(99);
-    let err = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+    let err = build_find_arb_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
         token_program,
         SPL_TOKEN,
     ))))
@@ -274,7 +251,7 @@ fn builder_rejects_unknown_market_token_program() {
 
 #[test]
 fn builder_rejects_alphaq_token2022_on_right_side() {
-    let err = build_find_arb_v2_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
+    let err = build_find_arb_instruction(params(MarketAccounts::AlphaQ(alphaq_accounts(
         SPL_TOKEN,
         SPL_TOKEN_2022,
     ))))
@@ -294,22 +271,22 @@ fn builder_rejects_alphaq_token2022_on_right_side() {
 fn public_builder_always_emits_dlmm_swap2_and_memo() {
     const FIRST_POOL_ACCOUNT: usize = 8;
 
-    let spl_ix = build_find_arb_v2_instruction(params(MarketAccounts::MeteoraDlmm(
+    let spl_ix = build_find_arb_instruction(params(MarketAccounts::MeteoraDlmm(
         dlmm_accounts(SPL_TOKEN, SPL_TOKEN),
     )))
     .unwrap();
-    assert_eq!(spl_ix.data[13], MarketId::MeteoraDlmm.as_u8());
+    assert_eq!(spl_ix.data[17], MarketId::MeteoraDlmm.as_u8());
     assert_eq!(spl_ix.accounts.len(), FIRST_POOL_ACCOUNT + 16);
     assert_eq!(
         spl_ix.accounts[FIRST_POOL_ACCOUNT + 10],
         AccountMeta::new_readonly(SPL_MEMO, false),
     );
 
-    let t22_ix = build_find_arb_v2_instruction(params(MarketAccounts::MeteoraDlmm(
+    let t22_ix = build_find_arb_instruction(params(MarketAccounts::MeteoraDlmm(
         dlmm_accounts(SPL_TOKEN_2022, SPL_TOKEN),
     )))
     .unwrap();
-    assert_eq!(t22_ix.data[13], MarketId::MeteoraDlmm.as_u8());
+    assert_eq!(t22_ix.data[17], MarketId::MeteoraDlmm.as_u8());
     assert_eq!(t22_ix.accounts.len(), FIRST_POOL_ACCOUNT + 16);
     assert_eq!(
         t22_ix.accounts[FIRST_POOL_ACCOUNT + 10],
@@ -423,8 +400,8 @@ fn builder_resolves_unified_market_ids_counts_and_program_order() {
     for (name, market, expected_id, expected_count, expected_programs) in cases {
         assert_eq!(market.try_market_id(), Ok(expected_id), "{name}");
         assert_eq!(market.try_account_count(), Ok(expected_count), "{name}");
-        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
-        assert_eq!(ix.data[13], expected_id.as_u8(), "{name}");
+        let ix = build_find_arb_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[17], expected_id.as_u8(), "{name}");
         let pool_slice = &ix.accounts[8..];
         assert_eq!(pool_slice.len(), expected_count, "{name}");
         for (index, program) in expected_programs {
@@ -448,7 +425,7 @@ fn builder_rejects_unknown_programs_for_every_unified_market_family() {
 
     for market in cases {
         assert!(matches!(
-            build_find_arb_v2_instruction(params(market)),
+            build_find_arb_instruction(params(market)),
             Err(BuildError::UnsupportedMarketTokenProgram { token_program, .. }) if token_program == unknown
         ));
         assert!(market.try_market_id().is_err());
@@ -463,7 +440,7 @@ fn non_flashloan_uses_fee_ata_without_vault_auth() {
     params.fail_if_no_profit = false;
     params.base.mint = USDT_MINT;
 
-    let ix = build_find_arb_v2_instruction(params).unwrap();
+    let ix = build_find_arb_instruction(params).unwrap();
     assert_eq!(ix.data[1], 0);
     assert_eq!(ix.accounts[4], AccountMeta::new(FEE_ATA_USDT, false));
     assert_eq!(ix.accounts[5], AccountMeta::new_readonly(spl_token_interface::ID, false));
@@ -474,7 +451,7 @@ fn usdc_flashloan_uses_shared_vault_authority() {
     let mut params = params(futarchy(1));
     params.base.mint = USDC_MINT;
 
-    let ix = build_find_arb_v2_instruction(params).unwrap();
+    let ix = build_find_arb_instruction(params).unwrap();
     assert_eq!(ix.accounts[4], AccountMeta::new(VAULT_ATA_USDC, false));
     assert_eq!(ix.accounts[5], AccountMeta::new_readonly(VAULT_AUTH, false));
 }
@@ -513,21 +490,21 @@ fn rejects_wire_count_overflow() {
         })
         .collect();
     assert!(matches!(
-        build_find_arb_v2_instruction(too_many_mints),
+        build_find_arb_instruction(too_many_mints),
         Err(BuildError::RouteMintCountOverflow(256))
     ));
 
     let mut too_many_pools = params(futarchy(1));
     too_many_pools.pools = vec![futarchy(1); usize::from(u8::MAX) + 1];
     assert!(matches!(
-        build_find_arb_v2_instruction(too_many_pools),
+        build_find_arb_instruction(too_many_pools),
         Err(BuildError::PoolCountOverflow(256))
     ));
 
-    let mut too_many_v3_pools = v3_params(futarchy(1), 300_000);
-    too_many_v3_pools.pools = vec![futarchy(1); usize::from(u8::MAX) + 1];
+    let mut too_many_autosized_pools = autosized_params(futarchy(1), 300_000);
+    too_many_autosized_pools.pools = vec![futarchy(1); usize::from(u8::MAX) + 1];
     assert!(matches!(
-        build_find_arb_v3_instruction(too_many_v3_pools),
+        build_find_arb_instruction(too_many_autosized_pools),
         Err(BuildError::PoolCountOverflow(256))
     ));
 }
@@ -538,14 +515,14 @@ fn validates_base_mint() {
     unsupported_base.flashloan = false;
     unsupported_base.base.mint = unique(77);
     assert!(matches!(
-        build_find_arb_v2_instruction(unsupported_base),
+        build_find_arb_instruction(unsupported_base),
         Err(BuildError::UnsupportedBaseMint(_))
     ));
 
     let mut unsupported_flashloan_base = params(futarchy(1));
     unsupported_flashloan_base.base.mint = USDT_MINT;
     assert!(matches!(
-        build_find_arb_v2_instruction(unsupported_flashloan_base),
+        build_find_arb_instruction(unsupported_flashloan_base),
         Err(BuildError::UnsupportedFlashloanBaseMint(_))
     ));
 }
@@ -563,19 +540,19 @@ fn supported_base_mint_list_has_four_entries() {
 fn validates_route_mint_headers() {
     let mut missing = params(futarchy(1));
     missing.route_mints.clear();
-    assert_eq!(build_find_arb_v2_instruction(missing), Err(BuildError::MissingRouteMints));
+    assert_eq!(build_find_arb_instruction(missing), Err(BuildError::MissingRouteMints));
 
     let mut includes_base = params(futarchy(1));
     includes_base.route_mints[0].mint = includes_base.base.mint;
     assert_eq!(
-        build_find_arb_v2_instruction(includes_base),
+        build_find_arb_instruction(includes_base),
         Err(BuildError::BaseMintInRouteMints(WSOL_MINT))
     );
 
     let mut duplicate = params(futarchy(1));
     duplicate.route_mints.push(duplicate.route_mints[0]);
     assert_eq!(
-        build_find_arb_v2_instruction(duplicate),
+        build_find_arb_instruction(duplicate),
         Err(BuildError::DuplicateRouteMint(unique(202)))
     );
 }
@@ -592,9 +569,9 @@ fn typed_market_variant_sets_market_id_without_runtime_pairing() {
         token_1_mint: unique(15),
         observation_state: unique(16),
     }));
-    let ix = build_find_arb_v2_instruction(params).unwrap();
-    assert_eq!(ix.data[13], MarketId::FutarchySpot.as_u8());
-    assert_eq!(ix.data[14], MarketId::RaydiumCp.as_u8());
+    let ix = build_find_arb_instruction(params).unwrap();
+    assert_eq!(ix.data[17], MarketId::FutarchySpot.as_u8());
+    assert_eq!(ix.data[18], MarketId::RaydiumCp.as_u8());
 }
 
 #[test]
@@ -744,8 +721,8 @@ fn deprecated_goonfi_v2_t22_alias_preserves_wire_output() {
         global_state: unique(7),
     };
 
-    let automatic = build_find_arb_v2_instruction(params(MarketAccounts::GoonfiV2(accounts))).unwrap();
-    let legacy = build_find_arb_v2_instruction(params(MarketAccounts::GoonfiV2T22(accounts))).unwrap();
+    let automatic = build_find_arb_instruction(params(MarketAccounts::GoonfiV2(accounts))).unwrap();
+    let legacy = build_find_arb_instruction(params(MarketAccounts::GoonfiV2T22(accounts))).unwrap();
 
     assert_eq!(legacy.data, automatic.data);
     assert_eq!(legacy.accounts, automatic.accounts);
@@ -792,8 +769,8 @@ fn deprecated_t22_aliases_validate_programs_and_builder_metadata() {
     for (market, expected_id, expected_count) in cases {
         assert_eq!(market.try_market_id(), Ok(expected_id));
         assert_eq!(market.try_account_count(), Ok(expected_count));
-        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
-        assert_eq!(ix.data[13], expected_id.as_u8());
+        let ix = build_find_arb_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[17], expected_id.as_u8());
         assert_eq!(ix.accounts.len(), 8 + expected_count);
     }
 
@@ -820,7 +797,7 @@ fn deprecated_t22_aliases_validate_programs_and_builder_metadata() {
     ];
     for market in invalid_pairs {
         assert!(matches!(
-            build_find_arb_v2_instruction(params(market)),
+            build_find_arb_instruction(params(market)),
             Err(BuildError::UnsupportedMarketTokenProgramPair { .. })
         ));
     }
@@ -846,7 +823,7 @@ fn deprecated_t22_aliases_validate_programs_and_builder_metadata() {
     ];
     for market in invalid {
         assert!(matches!(
-            build_find_arb_v2_instruction(params(market)),
+            build_find_arb_instruction(params(market)),
             Err(BuildError::UnsupportedMarketTokenProgram { token_program, .. }) if token_program == unknown
         ));
     }
@@ -908,8 +885,8 @@ fn legacy_t22_aliases_without_program_fields_remain_forced_compatibility_paths()
 
     for (market, expected_id) in cases {
         assert_eq!(market.try_market_id(), Ok(expected_id));
-        let ix = build_find_arb_v2_instruction(params(market)).unwrap();
-        assert_eq!(ix.data[13], expected_id.as_u8());
+        let ix = build_find_arb_instruction(params(market)).unwrap();
+        assert_eq!(ix.data[17], expected_id.as_u8());
         assert_eq!(ix.accounts.len(), 8 + 15);
     }
 }
@@ -1552,10 +1529,10 @@ fn byreal_dynamic_layout_is_mint_aware_in_all_token_program_combinations() {
             assert_eq!(metas[9], AccountMeta::new_readonly(accounts.clmm.token_mint_1, false));
             assert_eq!(metas[15], AccountMeta::new_readonly(unique(31), false));
             assert_eq!(metas[16], AccountMeta::new_readonly(unique(32), false));
-            let v2 = build_find_arb_v2_instruction(params(market)).unwrap();
-            let v3 = build_find_arb_v3_instruction(v3_params(market, 500_000)).unwrap();
-            assert_eq!(&v2.accounts[v2.accounts.len()-17..], &metas);
-            assert_eq!(&v3.accounts[v3.accounts.len()-17..], &metas);
+            let manual = build_find_arb_instruction(params(market)).unwrap();
+            let autosized = build_find_arb_instruction(autosized_params(market, 500_000)).unwrap();
+            assert_eq!(&manual.accounts[manual.accounts.len()-17..], &metas);
+            assert_eq!(&autosized.accounts[autosized.accounts.len()-17..], &metas);
         }
     }
     let bad = MarketAccounts::ByrealDynamic(ByrealDynamicAccounts {
@@ -1568,9 +1545,9 @@ fn byreal_dynamic_layout_is_mint_aware_in_all_token_program_combinations() {
     assert!(metas.is_empty());
 }
 
-fn v4_params(budget: Option<u32>, extra_fee: Option<ExtraFee>, flashloan: bool) -> FindArbV4Params {
-    let p = v3_params(futarchy(1), budget.unwrap_or(0));
-    FindArbV4Params {
+fn fee_params(budget: Option<u32>, extra_fee: Option<ExtraFee>, flashloan: bool) -> FindArbParams {
+    let p = autosized_params(futarchy(1), budget.unwrap_or(0));
+    FindArbParams {
         signer: p.signer, base: p.base, flashloan,
         fail_if_no_profit: p.fail_if_no_profit,
         min_profit_base_units: p.min_profit_base_units,
@@ -1586,8 +1563,8 @@ fn v4_wire_and_account_matrix() {
             for extra in [None, Some(ExtraFee { token_account: unique(211), bps: 250 })] {
                 let mut old = params(futarchy(1));
                 old.flashloan = flashloan;
-                let old = build_find_arb_v2_instruction(old).unwrap();
-                let ix = build_find_arb_v4_instruction(v4_params(budget, extra, flashloan)).unwrap();
+                let old = build_find_arb_instruction(old).unwrap();
+                let ix = build_find_arb_instruction(fee_params(budget, extra, flashloan)).unwrap();
                 assert_eq!(ix.data[0], 13);
                 assert_eq!(ix.data[1], old.data[1] | if extra.is_some() { 4 } else { 0 });
                 assert_eq!(&ix.data[2..13], &old.data[2..13]);
@@ -1598,7 +1575,7 @@ fn v4_wire_and_account_matrix() {
                     expected_accounts.insert(5 + usize::from(flashloan), AccountMeta::new(extra.token_account, false));
                     19
                 } else { 17 };
-                assert_eq!(&ix.data[start..], &old.data[13..]);
+                assert_eq!(&ix.data[start..], &old.data[17..]);
                 assert_eq!(ix.accounts, expected_accounts);
             }
         }
@@ -1608,14 +1585,14 @@ fn v4_wire_and_account_matrix() {
 #[test]
 fn v4_rejects_invalid_extra_fees() {
     for bps in [0, 9000, 10_000, u16::MAX] {
-        let p = v4_params(None, Some(ExtraFee { token_account: unique(211), bps }), true);
-        assert_eq!(build_find_arb_v4_instruction(p), Err(BuildError::InvalidExtraFeeBps));
+        let p = fee_params(None, Some(ExtraFee { token_account: unique(211), bps }), true);
+        assert_eq!(build_find_arb_instruction(p), Err(BuildError::InvalidExtraFeeBps));
     }
     for token_account in [base().user_ata, VAULT_ATA_WSOL] {
-        let p = v4_params(None, Some(ExtraFee { token_account, bps: 250 }), true);
-        assert_eq!(build_find_arb_v4_instruction(p), Err(BuildError::InvalidExtraFeeAccount));
+        let p = fee_params(None, Some(ExtraFee { token_account, bps: 250 }), true);
+        assert_eq!(build_find_arb_instruction(p), Err(BuildError::InvalidExtraFeeAccount));
     }
-    assert!(build_find_arb_v4_instruction(v4_params(None, Some(ExtraFee {
+    assert!(build_find_arb_instruction(fee_params(None, Some(ExtraFee {
         token_account: unique(211), bps: 8999,
     }), true)).is_ok());
 }

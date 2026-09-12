@@ -1,4 +1,4 @@
-//! Pure client-side instruction builders for Prism FindArb V2, V3, and V4.
+//! Pure client-side instruction builder for Prism using the V4 wire format.
 //!
 //! This crate does not discover routes, fetch accounts, derive user token
 //! accounts, create ATAs, choose lookup tables, build transactions, or submit
@@ -20,87 +20,90 @@ use crate::{
 };
 
 pub use constants::{
-    FEE_ATA_USD1, FEE_ATA_USDT, FEE_OWNER, FIND_ARB_V2_DISCRIMINATOR,
-    FIND_ARB_V3_DISCRIMINATOR, FIND_ARB_V4_DISCRIMINATOR, PROGRAM_ID, SPL_ATA_PROGRAM, SPL_TOKEN, SPL_TOKEN_2022, USDC_MINT,
+    FEE_ATA_USD1, FEE_ATA_USDT, FEE_OWNER, FIND_ARB_DISCRIMINATOR, PROGRAM_ID, SPL_ATA_PROGRAM, SPL_TOKEN, SPL_TOKEN_2022, USDC_MINT,
     USD1_MINT, USDT_MINT, VAULT_ATA_USDC, VAULT_ATA_WSOL, VAULT_AUTH, WSOL_MINT,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MintAccount {
+    /// Token mint address.
     pub mint: Pubkey,
+    /// Token program that owns the mint (SPL Token or Token-2022).
     pub token_program: Pubkey,
+    /// Signer-owned token account for this mint; supplied by the caller.
     pub user_ata: Pubkey,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FindArbV2Params {
-    pub signer: Pubkey,
-    pub base: MintAccount,
-    pub flashloan: bool,
-    pub fail_if_no_profit: bool,
-    /// Minimum realized profit floor in `base.mint` atomic units.
-    ///
-    /// For WSOL this is native lamports. For USDC/USDT/USD1 this is 6-decimal
-    /// token units, so callers must convert any native SOL tip into base units
-    /// before building the instruction.
-    pub min_profit_base_units: u64,
-    /// Wire byte forwarded to Prism for dynamic walk-table depth.
-    ///
-    /// Prism uses this as the per-direction DLMM bin-walk request and as the
-    /// produced-step cap for selected CL-family tick walks, then clamps it to
-    /// each program-side capacity.
-    pub max_dynamic_walk_steps: u8,
-    pub route_mints: Vec<MintAccount>,
-    pub pools: Vec<MarketAccounts>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FindArbV3Params {
-    pub signer: Pubkey,
-    pub base: MintAccount,
-    pub flashloan: bool,
-    pub fail_if_no_profit: bool,
-    /// Minimum realized profit floor in `base.mint` atomic units.
-    pub min_profit_base_units: u64,
-    /// Fallback dynamic-walk depth when V3 does not choose one from the CU budget.
-    pub max_dynamic_walk_steps: u8,
-    /// Nonzero compute-unit allowance for the Prism instruction alone.
-    ///
-    /// This is a caller assertion, not the transaction compute-unit limit or
-    /// Prism's actual remaining compute units.
-    pub prism_cu_budget: u32,
-    pub route_mints: Vec<MintAccount>,
-    pub pools: Vec<MarketAccounts>,
 }
 
 /// Extra fee destination must be an initialized, writable base-mint token account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExtraFee {
+    /// Initialized base-mint token account receiving the extra fee.
     pub token_account: Pubkey,
     /// 1..=8999; combined with Prism's configured 1000 bps, remains below 100%.
     pub bps: u16,
 }
 
+/// Required account inputs and execution settings for a Prism V4 instruction.
+/// Use [`Self::new`] for default settings, then override individual public fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FindArbV4Params {
+pub struct FindArbParams {
+    /// Transaction signer and owner of the supplied user token accounts; required.
     pub signer: Pubkey,
+    /// Base mint, its token program, and the signer's base token account; required.
     pub base: MintAccount,
+    /// Borrow from Prism's base vault; defaults to true. Supported for WSOL/USDC only.
     pub flashloan: bool,
+    /// Fail when no profitable execution occurs; defaults to true.
     pub fail_if_no_profit: bool,
-    /// Minimum realized profit floor in `base.mint` atomic units.
+    /// Minimum realized profit floor in `base.mint` atomic units; defaults to 0.
+    ///
+    /// For WSOL this is native lamports. For USDC/USDT/USD1 this is 6-decimal
+    /// token units, so callers must convert any native SOL tip into base units
+    /// before building the instruction.
     pub min_profit_base_units: u64,
-    /// Fallback dynamic-walk depth when V4 does not choose one from the CU budget.
+    /// Manual/fallback tick or bin walk depth; defaults to 20.
+    /// Used when autosizing is disabled or does not choose a depth.
     pub max_dynamic_walk_steps: u8,
-    /// Compute-unit allowance for Prism alone; None disables autosizing.
+    /// Compute-unit allowance for Prism alone; defaults to None (autosizing disabled).
     /// Some(0) also encodes the disabled wire value.
     ///
     /// This is a caller assertion, not the transaction compute-unit limit or
     /// Prism's actual remaining compute units.
     pub prism_cu_budget: Option<u32>,
-    /// Optional additive fee on the same realized profit basis as Prism.
+    /// Optional additive fee on the same realized profit basis as Prism; defaults to None.
     pub extra_fee: Option<ExtraFee>,
+    /// Non-base mint accounts for target/bridge tokens; required, nonempty, and unique by mint.
     pub route_mints: Vec<MintAccount>,
+    /// Unordered pool menu from which Prism selects a route; required and nonempty.
     pub pools: Vec<MarketAccounts>,
+}
+
+impl FindArbParams {
+    /// Creates parameters from the four required account inputs.
+    ///
+    /// Defaults: flashloan and fail_if_no_profit enabled, zero minimum profit,
+    /// 20 manual/fallback walk steps, no autosizing budget, and no extra fee.
+    /// Disable flashloan for USDT/USD1 bases. Validation occurs when calling
+    /// [`build_find_arb_instruction`], not in this constructor.
+    pub fn new(
+        signer: Pubkey,
+        base: MintAccount,
+        route_mints: Vec<MintAccount>,
+        pools: Vec<MarketAccounts>,
+    ) -> Self {
+        Self {
+            signer,
+            base,
+            flashloan: true,
+            fail_if_no_profit: true,
+            min_profit_base_units: 0,
+            max_dynamic_walk_steps: 20,
+            prism_cu_budget: None,
+            extra_fee: None,
+            route_mints,
+            pools,
+        }
+    }
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -109,7 +112,7 @@ pub enum BuildError {
     UnsupportedBaseMint(Pubkey),
     #[error("unsupported Prism flashloan base mint {0}")]
     UnsupportedFlashloanBaseMint(Pubkey),
-    #[error("route mint count does not fit find_arb_v2 wire format ({0})")]
+    #[error("route mint count does not fit find_arb wire format ({0})")]
     RouteMintCountOverflow(usize),
     #[error("missing route mints")]
     MissingRouteMints,
@@ -117,7 +120,7 @@ pub enum BuildError {
     BaseMintInRouteMints(Pubkey),
     #[error("duplicate route mint {0}")]
     DuplicateRouteMint(Pubkey),
-    #[error("pool count does not fit find_arb_v2 wire format ({0})")]
+    #[error("pool count does not fit find_arb wire format ({0})")]
     PoolCountOverflow(usize),
     #[error("missing pools")]
     MissingPools,
@@ -136,80 +139,14 @@ pub enum BuildError {
         token_program_a: Pubkey,
         token_program_b: Pubkey,
     },
-    #[error("find_arb_v3 Prism CU budget must be nonzero")]
-    InvalidPrismCuBudget,
     #[error("extra fee must be between 1 and 8999 bps")]
     InvalidExtraFeeBps,
     #[error("extra fee token account aliases a settlement account")]
     InvalidExtraFeeAccount,
 }
 
-pub fn build_find_arb_v2_instruction(params: FindArbV2Params) -> Result<Instruction, BuildError> {
-    build_find_arb_instruction(FindArbInstructionParams {
-        discriminator: FIND_ARB_V2_DISCRIMINATOR,
-        signer: params.signer,
-        base: params.base,
-        flashloan: params.flashloan,
-        fail_if_no_profit: params.fail_if_no_profit,
-        min_profit_base_units: params.min_profit_base_units,
-        dynamic_walk_steps: params.max_dynamic_walk_steps,
-        prism_cu_budget: None,
-        extra_fee: None,
-        route_mints: params.route_mints,
-        pools: params.pools,
-    })
-}
-
-pub fn build_find_arb_v3_instruction(params: FindArbV3Params) -> Result<Instruction, BuildError> {
-    if params.prism_cu_budget == 0 {
-        return Err(BuildError::InvalidPrismCuBudget);
-    }
-    build_find_arb_instruction(FindArbInstructionParams {
-        discriminator: FIND_ARB_V3_DISCRIMINATOR,
-        signer: params.signer,
-        base: params.base,
-        flashloan: params.flashloan,
-        fail_if_no_profit: params.fail_if_no_profit,
-        min_profit_base_units: params.min_profit_base_units,
-        dynamic_walk_steps: params.max_dynamic_walk_steps,
-        prism_cu_budget: Some(params.prism_cu_budget),
-        extra_fee: None,
-        route_mints: params.route_mints,
-        pools: params.pools,
-    })
-}
-
-pub fn build_find_arb_v4_instruction(params: FindArbV4Params) -> Result<Instruction, BuildError> {
-    build_find_arb_instruction(FindArbInstructionParams {
-        discriminator: FIND_ARB_V4_DISCRIMINATOR,
-        signer: params.signer,
-        base: params.base,
-        flashloan: params.flashloan,
-        fail_if_no_profit: params.fail_if_no_profit,
-        min_profit_base_units: params.min_profit_base_units,
-        dynamic_walk_steps: params.max_dynamic_walk_steps,
-        prism_cu_budget: Some(params.prism_cu_budget.unwrap_or(0)),
-        extra_fee: params.extra_fee,
-        route_mints: params.route_mints,
-        pools: params.pools,
-    })
-}
-
-struct FindArbInstructionParams {
-    discriminator: u8,
-    signer: Pubkey,
-    base: MintAccount,
-    flashloan: bool,
-    fail_if_no_profit: bool,
-    min_profit_base_units: u64,
-    dynamic_walk_steps: u8,
-    prism_cu_budget: Option<u32>,
-    extra_fee: Option<ExtraFee>,
-    route_mints: Vec<MintAccount>,
-    pools: Vec<MarketAccounts>,
-}
-
-fn build_find_arb_instruction(params: FindArbInstructionParams) -> Result<Instruction, BuildError> {
+/// Builds a Prism arbitrage instruction using the V4 wire format (discriminator 13).
+pub fn build_find_arb_instruction(params: FindArbParams) -> Result<Instruction, BuildError> {
     let fee_recipient_ata = prism_fee_recipient_ata(params.base.mint, params.base.token_program)?;
     if let Some(extra) = params.extra_fee {
         if extra.bps == 0 || extra.bps >= 9000 {
@@ -242,19 +179,16 @@ fn build_find_arb_instruction(params: FindArbInstructionParams) -> Result<Instru
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut data = Vec::with_capacity(
-        13 + usize::from(params.prism_cu_budget.is_some()) * 4
-            + usize::from(params.extra_fee.is_some()) * 2 + resolved_pools.len(),
+        17 + usize::from(params.extra_fee.is_some()) * 2 + resolved_pools.len(),
     );
-    data.push(params.discriminator);
+    data.push(FIND_ARB_DISCRIMINATOR);
     data.push(flags(params.flashloan, params.fail_if_no_profit)
         | if params.extra_fee.is_some() { 0x04 } else { 0 });
-    data.push(params.dynamic_walk_steps);
+    data.push(params.max_dynamic_walk_steps);
     data.push(num_mints);
     data.push(num_pools);
     data.extend_from_slice(&params.min_profit_base_units.to_le_bytes());
-    if let Some(prism_cu_budget) = params.prism_cu_budget {
-        data.extend_from_slice(&prism_cu_budget.to_le_bytes());
-    }
+    data.extend_from_slice(&params.prism_cu_budget.unwrap_or(0).to_le_bytes());
     if let Some(extra) = params.extra_fee {
         data.extend_from_slice(&extra.bps.to_le_bytes());
     }
