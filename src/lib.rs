@@ -1,4 +1,4 @@
-//! Pure client-side instruction builder for Prism using the V4 wire format.
+//! Pure client-side instruction builder for Prism.
 //!
 //! This crate does not discover routes, fetch accounts, derive user token
 //! accounts, create ATAs, choose lookup tables, build transactions, or submit
@@ -43,7 +43,7 @@ pub struct ExtraFee {
     pub bps: u16,
 }
 
-/// Required account inputs and execution settings for a Prism V4 instruction.
+/// Required account inputs and execution settings for a Prism FindArb instruction.
 /// Use [`Self::new`] for default settings, then override individual public fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FindArbParams {
@@ -145,7 +145,7 @@ pub enum BuildError {
     InvalidExtraFeeAccount,
 }
 
-/// Builds a Prism arbitrage instruction using the V4 wire format (discriminator 13).
+/// Builds a Prism arbitrage instruction using the FindArb wire format (discriminator 13).
 pub fn build_find_arb_instruction(params: FindArbParams) -> Result<Instruction, BuildError> {
     let fee_recipient_ata = prism_fee_recipient_ata(params.base.mint, params.base.token_program)?;
     if let Some(extra) = params.extra_fee {

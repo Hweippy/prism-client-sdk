@@ -172,7 +172,7 @@ fn goonfi_accounts(token_program_a: Pubkey, token_program_b: Pubkey) -> GoonfiV2
 }
 
 #[test]
-fn builds_manual_v4_header_and_prefix() {
+fn builds_manual_header_and_prefix() {
     let ix = build_find_arb_instruction(params(MarketAccounts::RaydiumV4(RaydiumV4Accounts {
         pool_state: unique(1),
         coin_vault: unique(2),
@@ -202,7 +202,7 @@ fn builds_manual_v4_header_and_prefix() {
 }
 
 #[test]
-fn builds_autosized_v4_header_and_preserves_manual_accounts() {
+fn builds_autosized_header_and_preserves_manual_accounts() {
     let market = MarketAccounts::RaydiumV4(RaydiumV4Accounts {
         pool_state: unique(1),
         coin_vault: unique(2),
@@ -1557,7 +1557,7 @@ fn fee_params(budget: Option<u32>, extra_fee: Option<ExtraFee>, flashloan: bool)
 }
 
 #[test]
-fn v4_wire_and_account_matrix() {
+fn find_arb_wire_and_account_matrix() {
     for flashloan in [false, true] {
         for budget in [None, Some(0u32), Some(500_000)] {
             for extra in [None, Some(ExtraFee { token_account: unique(211), bps: 250 })] {
@@ -1583,7 +1583,7 @@ fn v4_wire_and_account_matrix() {
 }
 
 #[test]
-fn v4_rejects_invalid_extra_fees() {
+fn find_arb_rejects_invalid_extra_fees() {
     for bps in [0, 9000, 10_000, u16::MAX] {
         let p = fee_params(None, Some(ExtraFee { token_account: unique(211), bps }), true);
         assert_eq!(build_find_arb_instruction(p), Err(BuildError::InvalidExtraFeeBps));

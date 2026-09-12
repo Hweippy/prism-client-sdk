@@ -1,10 +1,10 @@
 # prism-client-sdk
 
-Self-contained Rust builders for Prism `find_arb_v4` instructions with CU-based walk sizing.
+Self-contained Rust builders for Prism `find_arb` instructions with CU-based walk sizing.
 
-Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb_v4` for budget-based walk sizing with optional manual control.
+Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb` for budget-based walk sizing with optional manual control.
 
-The SDK exposes one arbitrage builder, `build_find_arb_instruction(FindArbParams)`, which always emits the V4 wire format (discriminator 13). The versioned builders and parameter types have been removed; existing callers must migrate to these names. Manual sizing and autosizing use the same entry point.
+The SDK exposes one arbitrage builder, `build_find_arb_instruction(FindArbParams)`, which emits the FindArb wire format (discriminator 13). The versioned builders and parameter types have been removed; existing callers must migrate to these names. Manual sizing and autosizing use the same entry point.
 
 `FindArbParams::new(signer, base, route_mints, pools)` requires the account inputs and initializes the execution settings. Callers can override individual settings before building the instruction.
 
@@ -89,21 +89,7 @@ Each `MintAccount` requires `mint`, `token_program`, and `user_ata` (all `Pubkey
 
 The SDK does no account discovery. With the required pubkeys in scope, put them into the typed parameters:
 
-### V4: autosizing
-
-Set `prism_cu_budget: Some(nonzero_budget)` to enable autosizing for eligible Pump/DLMM winners. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
-
-Set the allowance to roughly **the transaction CU limit minus the compute needed by all other instructions**, with some extra headroom:
-
-```text
-prism_cu_budget = transaction_cu_limit - non_prism_cu_reserve - safety_margin
-```
-
-Reserve compute for instructions both before and after Prism, such as account creation, token transfers, and tip payments. Estimate their cost from simulation or representative transaction logs, allowing for variation. DEX swaps and other CPIs invoked by Prism are part of Prism's allowance; do not subtract them as separate instructions.
-
-For example, with a transaction limit of **400,000 CU**, a **60,000 CU** reserve for other instructions, and **20,000 CU** of headroom, set `params.prism_cu_budget = Some(320_000)`. These are illustrative values; choose the reserve and margin for your transaction composition.
-
-Set the transaction's compute-unit limit separately. This parameter tells Prism how much compute to plan around; it does not raise the transaction limit or guarantee execution will fit. If the subtraction leaves no positive allowance, increase the transaction budget or reduce the other work; `Some(0)` disables autosizing rather than imposing a zero-CU cap.
+### FindArb instruction
 
 ```rust
 use prism_client_sdk::{
@@ -152,13 +138,10 @@ let mut params = FindArbParams::new(
 );
 params.min_profit_base_units = 10_000;
 params.max_dynamic_walk_steps = 12;
-params.prism_cu_budget = Some(320_000);
 let ix = build_find_arb_instruction(params)?;
 ```
 
 This builds a two-pool menu for a 2-hop candidate. The SDK assembles the instruction; the caller chooses pools whose endpoint mints match `base` and `route_mints`.
-
-To disable autosizing, set `params.prism_cu_budget = None` (or `Some(0)`); `max_dynamic_walk_steps` then controls the manual tick/bin walk depth.
 
 To add a third-party fee on the same realized profit basis as Prism, set the following before calling `build_find_arb_instruction`, using an existing base-mint token account:
 
@@ -169,9 +152,33 @@ params.extra_fee = Some(prism_client_sdk::ExtraFee {
 });
 ```
 
+### Autosizing
+
+Autosizing chooses the dynamic walk depth for eligible Pump/DLMM winners from the supplied CU allowance. Enable it before building the instruction:
+
+```rust
+params.prism_cu_budget = Some(320_000);
+```
+
+Autosizing is disabled by default. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
+
+Set the allowance to roughly **the transaction CU limit minus the compute needed by all other instructions**, with some extra headroom:
+
+```text
+prism_cu_budget = transaction_cu_limit - non_prism_cu_reserve - safety_margin
+```
+
+Reserve compute for instructions both before and after Prism, such as account creation, token transfers, and tip payments. Estimate their cost from simulation or representative transaction logs, allowing for variation. DEX swaps and other CPIs invoked by Prism are part of Prism's allowance; do not subtract them as separate instructions.
+
+For example, with a transaction limit of **400,000 CU**, a **60,000 CU** reserve for other instructions, and **20,000 CU** of headroom, set `params.prism_cu_budget = Some(320_000)`. These are illustrative values; choose the reserve and margin for your transaction composition.
+
+Set the transaction's compute-unit limit separately. This parameter tells Prism how much compute to plan around; it does not raise the transaction limit or guarantee execution will fit. If the subtraction leaves no positive allowance, increase the transaction budget or reduce the other work; `Some(0)` disables autosizing rather than imposing a zero-CU cap.
+
+To disable autosizing, set `params.prism_cu_budget = None` (or `Some(0)`); `max_dynamic_walk_steps` then controls the manual tick/bin walk depth.
+
 ### Three-hop pool menu
 
-For V4, a 3-hop candidate supplies both non-base mints and three markets that form `BASE ↔ A ↔ B ↔ BASE`:
+A 3-hop candidate supplies both non-base mints and three markets that form `BASE ↔ A ↔ B ↔ BASE`:
 
 ```rust
 let route_mints = vec![
@@ -201,7 +208,7 @@ The pool entries remain unordered; their mint connectivity determines the execut
 
 ## Instruction Data
 
-V4 uses discriminator **13**. Integer fields are little-endian:
+FindArb uses discriminator **13**. Integer fields are little-endian:
 
 | Byte offset | Field |
 | --- | --- |
@@ -843,7 +850,7 @@ The caller is responsible for using the correct dynamic pool, vault, mint, token
 
 ## Common On-chain Errors
 
-These are Prism `Custom(u32)` errors callers commonly see after simulating or sending a `find_arb_v4` instruction. Solana logs the same value in hexadecimal as `custom program error: 0x...`.
+These are Prism `Custom(u32)` errors callers commonly see after simulating or sending a `find_arb` instruction. Solana logs the same value in hexadecimal as `custom program error: 0x...`.
 
 Instruction, account, and pool layout errors:
 
