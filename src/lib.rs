@@ -15,7 +15,7 @@ use solana_pubkey::Pubkey;
 use thiserror::Error;
 
 use crate::{
-    constants::{FLAG_FAIL_IF_NO_PROFIT, FLAG_FLASHLOAN},
+    constants::{FLAG_FAIL_IF_NO_PROFIT, FLAG_FLASHLOAN, FLAG_ORDERED_ROUTE},
     markets::MarketAccounts,
 };
 
@@ -55,6 +55,11 @@ pub struct FindArbParams {
     pub flashloan: bool,
     /// Fail when no profitable execution occurs; defaults to true.
     pub fail_if_no_profit: bool,
+    /// Use all supplied pools as an ordered 2..=5-hop route; defaults to false.
+    /// Skips on-chain route discovery and candidate selection, but still optimizes
+    /// the input amount and enforces profit checks. Prism validates pool connectivity
+    /// and a simple cycle back to the base mint on-chain. Autosizing is disabled.
+    pub ordered_route: bool,
     /// Minimum realized profit floor in `base.mint` atomic units; defaults to 0.
     ///
     /// For WSOL this is native lamports. For USDC/USDT/USD1 this is 6-decimal
@@ -68,13 +73,17 @@ pub struct FindArbParams {
     /// Some(0) also encodes the disabled wire value.
     ///
     /// This is a caller assertion, not the transaction compute-unit limit or
-    /// Prism's actual remaining compute units.
+    /// Prism's actual remaining compute units. Ordered routes always use the
+    /// manual/fallback walk depth, even when this allowance is nonzero.
     pub prism_cu_budget: Option<u32>,
     /// Optional additive fee on the same realized profit basis as Prism; defaults to None.
     pub extra_fee: Option<ExtraFee>,
     /// Non-base mint accounts for target/bridge tokens; required, nonempty, and unique by mint.
     pub route_mints: Vec<MintAccount>,
-    /// Unordered pool menu from which Prism selects a route; required and nonempty.
+    /// Pool menu from which Prism selects a route; required and nonempty.
+    /// With `ordered_route`, supply exactly 2..=5 pools in execution order, forming
+    /// BASE -> ... -> BASE without repeated pools or intermediate mints.
+    /// The SDK preserves this order; connectivity is checked by Prism on-chain.
     pub pools: Vec<MarketAccounts>,
 }
 
@@ -82,7 +91,8 @@ impl FindArbParams {
     /// Creates parameters from the four required account inputs.
     ///
     /// Defaults: flashloan and fail_if_no_profit enabled, zero minimum profit,
-    /// 20 manual/fallback walk steps, no autosizing budget, and no extra fee.
+    /// unordered route discovery, 20 manual/fallback walk steps, no autosizing
+    /// budget, and no extra fee.
     /// Disable flashloan for USDT/USD1 bases. Validation occurs when calling
     /// [`build_find_arb_instruction`], not in this constructor.
     pub fn new(
@@ -96,6 +106,7 @@ impl FindArbParams {
             base,
             flashloan: true,
             fail_if_no_profit: true,
+            ordered_route: false,
             min_profit_base_units: 0,
             max_dynamic_walk_steps: 20,
             prism_cu_budget: None,
@@ -124,6 +135,8 @@ pub enum BuildError {
     PoolCountOverflow(usize),
     #[error("missing pools")]
     MissingPools,
+    #[error("ordered route requires 2 to 5 pools ({0})")]
+    InvalidOrderedRoutePoolCount(usize),
     #[error("unsupported market id {0}")]
     UnsupportedMarketId(u8),
     #[error("unsupported token program {token_program} for {market}")]
@@ -146,6 +159,10 @@ pub enum BuildError {
 }
 
 /// Builds a Prism arbitrage instruction using the FindArb wire format (discriminator 13).
+///
+/// Set [`FindArbParams::ordered_route`] to encode flag bit 3 and use the supplied
+/// pool order. The SDK checks the 2..=5 pool count; it does not fetch pool state
+/// or validate route connectivity. Account slices and market IDs retain caller order.
 pub fn build_find_arb_instruction(params: FindArbParams) -> Result<Instruction, BuildError> {
     let fee_recipient_ata = prism_fee_recipient_ata(params.base.mint, params.base.token_program)?;
     if let Some(extra) = params.extra_fee {
@@ -167,6 +184,9 @@ pub fn build_find_arb_instruction(params: FindArbParams) -> Result<Instruction, 
     if params.pools.is_empty() {
         return Err(BuildError::MissingPools);
     }
+    if params.ordered_route && !(2..=5).contains(&params.pools.len()) {
+        return Err(BuildError::InvalidOrderedRoutePoolCount(params.pools.len()));
+    }
     let num_mints = u8::try_from(params.route_mints.len())
         .map_err(|_| BuildError::RouteMintCountOverflow(params.route_mints.len()))?;
     let num_pools = u8::try_from(params.pools.len())
@@ -183,7 +203,8 @@ pub fn build_find_arb_instruction(params: FindArbParams) -> Result<Instruction, 
     );
     data.push(FIND_ARB_DISCRIMINATOR);
     data.push(flags(params.flashloan, params.fail_if_no_profit)
-        | if params.extra_fee.is_some() { 0x04 } else { 0 });
+        | if params.extra_fee.is_some() { 0x04 } else { 0 }
+        | if params.ordered_route { FLAG_ORDERED_ROUTE } else { 0 });
     data.push(params.max_dynamic_walk_steps);
     data.push(num_mints);
     data.push(num_pools);

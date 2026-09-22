@@ -4,7 +4,7 @@ Self-contained Rust builders for Prism `find_arb` instructions with CU-based wal
 
 Prism is an on-chain Solana arbitrage execution program with a just-in-time routing engine. Callers submit a pool menu plus the required market accounts in a fully specified instruction; at execution time, Prism reads those supplied pools on-chain, finds an executable route across them, automatically chooses the swap input amount to maximize value for the submitted arb opportunity, and executes it through the supported DEX programs. The live program is [`Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv`](https://solscan.io/account/Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv). Use `find_arb` for budget-based walk sizing with optional manual control.
 
-The SDK exposes one arbitrage builder, `build_find_arb_instruction(FindArbParams)`, which emits the FindArb wire format (discriminator 13). The versioned builders and parameter types have been removed; existing callers must migrate to these names. Manual sizing and autosizing use the same entry point.
+The SDK exposes one arbitrage builder, `build_find_arb_instruction(FindArbParams)`, which emits the FindArb wire format (discriminator 13). The versioned builders and parameter types have been removed; existing callers must migrate to these names. Manual sizing, autosizing, and ordered routes use the same entry point.
 
 `FindArbParams::new(signer, base, route_mints, pools)` requires the account inputs and initializes the execution settings. Callers can override individual settings before building the instruction.
 
@@ -60,11 +60,11 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 
 ## Route Shape
 
-Prism supports up to 3-hop arbitrage. It does not build or execute routes with more than three swap legs.
+Prism discovers 2-hop and constrained 3-hop routes from an unordered pool menu by default. Set `ordered_route = true` to submit an exact route of 2–5 swap legs, including 4- and 5-hop routes.
 
-The `base` mint and `route_mints` fields have the same meaning for both shapes. `base` is the cycle's base token, and `route_mints` contains every non-base mint the submitted pool graph may touch. For a 2-hop route, that is usually one target mint. For a 3-hop route, include both non-base mints in the triangle.
+The `base` mint and `route_mints` fields have the same meaning in both routing modes. `base` is the cycle's base token, and `route_mints` contains every non-base mint the submitted pool graph may touch. For a 2-hop route, that is usually one target mint. For a 3-hop route, include both non-base mints in the triangle.
 
-`pools` is an unordered pool menu, not an ordered route. Prism reads each pool's endpoint mints on-chain, builds the candidate graph, and chooses the executable route order itself. Pools that touch `base` can become direct edges for 2-hop routes. Pools that do not touch `base`, but connect two submitted `route_mints`, can become the middle bridge edge of a 3-hop route. Submitting bridge pools for possible 3-hop routes does not disable 2-hop evaluation; Prism evaluates direct 2-hop candidates from the same pool menu when matching base-touching pools are present. The order of `pools` only controls instruction serialization; it does not force route execution order.
+With the default `ordered_route = false`, `pools` is an unordered pool menu. Prism reads each pool's endpoint mints on-chain, builds the candidate graph, and chooses the executable route order itself. Pools that touch `base` can become direct edges for 2-hop routes. Pools that do not touch `base`, but connect two submitted `route_mints`, can become the middle bridge edge of a 3-hop route. Submitting bridge pools for possible 3-hop routes does not disable 2-hop evaluation; Prism evaluates direct 2-hop candidates from the same pool menu when matching base-touching pools are present. The order of `pools` only controls instruction serialization; it does not force route execution order.
 
 ## Arguments and Defaults
 
@@ -75,12 +75,13 @@ The `base` mint and `route_mints` fields have the same meaning for both shapes. 
 | `signer` | `Pubkey` | Required | Signer and owner of the supplied user token accounts. |
 | `base` | `MintAccount` | Required | Base mint, token program, and signer's base token account. |
 | `route_mints` | `Vec<MintAccount>` | Required | Nonempty list of unique non-base target/bridge mints and user token accounts. |
-| `pools` | `Vec<MarketAccounts>` | Required | Nonempty unordered pool menu for on-chain route selection. |
+| `pools` | `Vec<MarketAccounts>` | Required | Nonempty pool menu; with `ordered_route = true`, exactly 2–5 pools in execution order. |
 | `flashloan` | `bool` | `true` | Borrow from Prism's base vault. Disable for USDT/USD1; flashloans support WSOL/USDC only. |
+| `ordered_route` | `bool` | `false` | Skip route discovery and candidate selection; validate and optimize the supplied route. Disables autosizing. |
 | `fail_if_no_profit` | `bool` | `true` | Fail when no profitable execution occurs. |
 | `min_profit_base_units` | `u64` | `0` | Minimum realized profit in base-mint atomic units; does not automatically cover transaction fees or tips. |
 | `max_dynamic_walk_steps` | `u8` | `20` | Manual/fallback tick or bin walk depth. |
-| `prism_cu_budget` | `Option<u32>` | `None` | Prism-only CU allowance; nonzero enables autosizing. `None` or `Some(0)` disables it. |
+| `prism_cu_budget` | `Option<u32>` | `None` | Prism-only CU allowance; nonzero enables autosizing for eligible unordered 2-hop routes. `None` or `Some(0)` disables it. |
 | `extra_fee` | `Option<ExtraFee>` | `None` | Optional additive fee, separate from Prism's own fee. |
 
 Each `MintAccount` requires `mint`, `token_program`, and `user_ata` (all `Pubkey`). When supplied, `ExtraFee` requires `token_account: Pubkey` (an initialized base-mint token account) and `bps: u16` (`1..=8999`). The constructor stores the inputs; `build_find_arb_instruction` performs SDK validation.
@@ -160,7 +161,7 @@ Autosizing chooses the dynamic walk depth for eligible Pump/DLMM winners from th
 params.prism_cu_budget = Some(320_000);
 ```
 
-Autosizing is disabled by default. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
+Autosizing is disabled by default and always bypassed for ordered routes (including 2-hop) and routes of 3 or more hops. These routes use the manual/fallback walk setting. The allowance covers the Prism instruction alone. Other winners, or routes for which the sizing model is unavailable, use `max_dynamic_walk_steps` as fallback; constant-product pools do not use dynamic walk sizing.
 
 Set the allowance to roughly **the transaction CU limit minus the compute needed by all other instructions**, with some extra headroom:
 
@@ -206,6 +207,24 @@ let pools = vec![
 
 The pool entries remain unordered; their mint connectivity determines the executable route.
 
+### Ordered routes (2–5 hops)
+
+Supply every pool in execution order, then enable the flag:
+
+```rust
+// ordered_pools follows BASE -> A -> B -> C -> BASE for a 4-hop route.
+// route_mints includes A, B, and C with their token programs and user ATAs.
+let mut params = FindArbParams::new(signer, base, route_mints, ordered_pools);
+params.ordered_route = true;
+let ix = build_find_arb_instruction(params)?;
+```
+
+Prism uses every submitted pool in order, without route discovery or candidate selection. It validates a connected cycle from `base` back to `base`, with no repeated physical pools, repeated intermediate mints, or early return to base. Swap directions follow the connected mint path and must be supported by each adapter. `route_mints` order does not determine execution order.
+
+The SDK checks the 2–5 pool count and preserves pool account slices and market IDs in caller order. It does not fetch pool state or validate connectivity; those checks happen on-chain. Invalid routes fail. Valid routes still use input optimization and the usual profit checks, including `fail_if_no_profit` behavior.
+
+Ordered routes always bypass CU-based walk autosizing, even with a nonzero `prism_cu_budget`. `max_dynamic_walk_steps` is serialized unchanged: for 2 hops it supplies the manual depth; for 3–5 hops Prism divides it among dynamic DLMM/CL legs with ceiling rounding, before adapter-specific adjustments and caps. Input optimization retains up to 5 golden refinement iterations for 3–5 hops. Account, transaction-size, and compute limits still apply; a supported hop count alone does not guarantee a transaction fits.
+
 ## Instruction Data
 
 FindArb uses discriminator **13**. Integer fields are little-endian:
@@ -213,7 +232,7 @@ FindArb uses discriminator **13**. Integer fields are little-endian:
 | Byte offset | Field |
 | --- | --- |
 | 0 | Discriminator: 13 |
-| 1 | Flags |
+| 1 | Flags (bit 3 enables ordered routes; no extra bytes) |
 | 2 | `max_dynamic_walk_steps` (manual depth or autosizing fallback) |
 | 3 | `num_mints` |
 | 4 | `num_pools` |
@@ -250,10 +269,11 @@ Flags:
 bit 0: flashloan
 bit 1: fail_if_no_profit
 bit 2: extra_fee present
-bits 3–7: reserved, must be zero
+bit 3: ordered_route (0x08), use all pools in submitted order
+bits 4–7: reserved, must be zero
 ```
 
-`num_mints` must be non-zero. The route mint list must not contain the base mint and must not contain duplicate mint pubkeys. The SDK does not expose Prism's high internal safety caps as client-side routing limits.
+`num_mints` must be non-zero. The route mint list must not contain the base mint and must not contain duplicate mint pubkeys. Ordered routes require 2–5 pools. For unordered menus, the SDK does not expose Prism's high internal safety caps as client-side routing limits.
 
 ## Settlement Accounts
 
@@ -891,6 +911,7 @@ Arb outcome and execution errors:
 | `BaseMintInRouteMints(pubkey)` | A route mint entry repeats `base.mint`. | The base mint is already represented by `FindArbParams.base`; remove it from `route_mints`. |
 | `DuplicateRouteMint(pubkey)` | The same route mint appears more than once. | Deduplicate by mint pubkey and keep the matching token program plus user ATA in the remaining `MintAccount`. |
 | `MissingPools` | `pools` is empty. | Add at least one `MarketAccounts` variant. The SDK does not infer pools from mints or route intent. |
+| `InvalidOrderedRoutePoolCount(count)` | `ordered_route` is true and a nonempty pool list has fewer than 2 or more than 5 entries. | Submit exactly 2–5 pools in route order. |
 | `PoolCountOverflow(count)` | `pools.len()` does not fit the `u8` count field in the instruction data. | This is the wire-format ceiling, not a routing-size recommendation. Real transactions should hit account, byte, or compute budgets first. |
 | `UnsupportedMarketId(byte)` | `markets::MarketId::try_from(byte)` received a byte outside the SDK's supported market id range. | This does not occur when building with typed `MarketAccounts` variants, because the variant supplies the market id. |
 | `UnsupportedMarketTokenProgram { market, token_program }` | A unified market struct contains a token program other than SPL Token or Token-2022. | Supply the actual owner program of each endpoint mint. |

@@ -1550,6 +1550,7 @@ fn fee_params(budget: Option<u32>, extra_fee: Option<ExtraFee>, flashloan: bool)
     FindArbParams {
         signer: p.signer, base: p.base, flashloan,
         fail_if_no_profit: p.fail_if_no_profit,
+        ordered_route: p.ordered_route,
         min_profit_base_units: p.min_profit_base_units,
         max_dynamic_walk_steps: p.max_dynamic_walk_steps,
         prism_cu_budget: budget, extra_fee, route_mints: p.route_mints, pools: p.pools,
@@ -1595,4 +1596,54 @@ fn find_arb_rejects_invalid_extra_fees() {
     assert!(build_find_arb_instruction(fee_params(None, Some(ExtraFee {
         token_account: unique(211), bps: 8999,
     }), true)).is_ok());
+}
+
+#[test]
+fn ordered_route_wire_and_pool_order() {
+    for hops in 2..=5 {
+        for flashloan in [false, true] {
+            for fail_if_no_profit in [false, true] {
+                for budget in [None, Some(0), Some(500_000)] {
+                    for extra in [None, Some(ExtraFee { token_account: unique(211), bps: 250 })] {
+                        let mut p = fee_params(budget, extra, flashloan);
+                        assert!(!p.ordered_route);
+                        p.fail_if_no_profit = fail_if_no_profit;
+                        p.max_dynamic_walk_steps = 50;
+                        // Deliberately descending pubkeys: execution order must not be sorted.
+                        p.pools = (0..hops).map(|i| futarchy(100 - i * 10)).collect();
+                        let unordered = build_find_arb_instruction(p.clone()).unwrap();
+                        p.ordered_route = true;
+                        let ordered = build_find_arb_instruction(p).unwrap();
+                        let mut expected = unordered;
+                        expected.data[1] |= 0x08;
+                        assert_eq!(ordered, expected);
+                        assert_eq!(ordered.data[2], 50);
+                        assert_eq!(ordered.data[4], hops);
+                        let start = 5 + usize::from(flashloan) + usize::from(extra.is_some()) + 2;
+                        for i in 0..hops {
+                            assert_eq!(ordered.accounts[start + usize::from(i) * 5].pubkey, unique(100 - i * 10));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ordered_route_pool_count_validation() {
+    for count in [0, 1, 6, 255, 256] {
+        let mut p = params(futarchy(1));
+        p.ordered_route = true;
+        p.pools = vec![futarchy(1); count];
+        let expected = if count == 0 {
+            BuildError::MissingPools
+        } else {
+            BuildError::InvalidOrderedRoutePoolCount(count)
+        };
+        assert_eq!(build_find_arb_instruction(p), Err(expected));
+    }
+    let mut p = params(futarchy(1));
+    p.pools = vec![futarchy(1); 6];
+    assert!(build_find_arb_instruction(p).is_ok());
 }
