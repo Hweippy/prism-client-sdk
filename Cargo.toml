@@ -5,8 +5,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
-solana-instruction = "=3.4.1"
-solana-pubkey = { version = "=4.2.1", features = ["curve25519"] }
+solana-instruction = "3.4.1"
+solana-pubkey = { version = "4.2.1", features = ["curve25519"] }
 thiserror = "1.0.63"
 
 [dev-dependencies]
