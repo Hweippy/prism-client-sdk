@@ -1502,7 +1502,119 @@ fn market_id_try_from_covers_current_range() {
     assert_eq!(MarketId::try_from(27), Err(BuildError::UnsupportedMarketId(27)));
     assert_eq!(MarketId::try_from(28).unwrap(), MarketId::GoonfiV2T22);
     assert_eq!(MarketId::try_from(29).unwrap(), MarketId::ByrealDynamic);
-    assert_eq!(MarketId::try_from(30), Err(BuildError::UnsupportedMarketId(30)));
+    assert_eq!(MarketId::try_from(30).unwrap(), MarketId::PumpfunAmmV2);
+    assert_eq!(MarketId::PumpfunAmmV2.as_u8(), 30);
+    assert_eq!(MarketId::PumpfunAmmV2.name(), "PumpfunAmmV2");
+    assert_eq!(MarketId::try_from(31), Err(BuildError::UnsupportedMarketId(31)));
+}
+
+fn pump_v2_accounts(base_token_program: Pubkey, quote_token_program: Pubkey) -> PumpfunAmmV2Accounts {
+    PumpfunAmmV2Accounts {
+        pool: unique(1),
+        user: unique(200),
+        base_mint: unique(202),
+        quote_mint: WSOL_MINT,
+        user_base_token_account: unique(203),
+        user_quote_token_account: base().user_ata,
+        pool_base_vault: unique(2),
+        pool_quote_vault: unique(3),
+        base_token_program,
+        quote_token_program,
+        user_volume_accumulator: unique(4),
+        buyback_fee_recipient: unique(5),
+    }
+}
+
+#[test]
+fn pump_v2_emits_full_contract_for_all_token_program_combinations() {
+    for base_program in [SPL_TOKEN, SPL_TOKEN_2022] {
+        for quote_program in [SPL_TOKEN, SPL_TOKEN_2022] {
+            let mut accounts = pump_v2_accounts(base_program, quote_program);
+            // A Token-2022 quote belongs in the route mint list, not the
+            // SPL-only arbitrage base. Pool base/quote order stays unchanged.
+            if quote_program == SPL_TOKEN_2022 {
+                accounts.quote_mint = unique(204);
+                accounts.user_quote_token_account = unique(205);
+            }
+            let market = MarketAccounts::PumpfunAmmV2(accounts);
+            assert_eq!(market.try_market_id().unwrap(), MarketId::PumpfunAmmV2);
+            assert_eq!(market.try_account_count().unwrap(), 17);
+            // Pinned to Prism's market-30 account order and privileges.
+            let expected = vec![
+                AccountMeta::new(accounts.pool, false),
+                AccountMeta::new(accounts.user, false),
+                AccountMeta::new_readonly(PUMPFUN_GLOBAL_CONFIG, false),
+                AccountMeta::new_readonly(accounts.base_mint, false),
+                AccountMeta::new_readonly(accounts.quote_mint, false),
+                AccountMeta::new(accounts.user_base_token_account, false),
+                AccountMeta::new(accounts.user_quote_token_account, false),
+                AccountMeta::new(accounts.pool_base_vault, false),
+                AccountMeta::new(accounts.pool_quote_vault, false),
+                AccountMeta::new_readonly(base_program, false),
+                AccountMeta::new_readonly(quote_program, false),
+                AccountMeta::new_readonly(crate::constants::SYSTEM_PROGRAM, false),
+                AccountMeta::new(accounts.user_volume_accumulator, false),
+                AccountMeta::new_readonly(PUMPFUN_FEE_CONFIG, false),
+                AccountMeta::new(accounts.buyback_fee_recipient, false),
+                AccountMeta::new_readonly(PUMPFUN_EVENT_AUTHORITY, false),
+                AccountMeta::new_readonly(PUMPFUN_AMM, false),
+            ];
+            let mut metas = Vec::new();
+            market.try_append_account_metas(&mut metas).unwrap();
+            assert_eq!(metas, expected);
+
+            for budget in [None, Some(500_000)] {
+                for ordered_route in [false, true] {
+                    let mut p = params(market);
+                    p.prism_cu_budget = budget;
+                    p.ordered_route = ordered_route;
+                    p.route_mints[0].token_program = base_program;
+                    if quote_program == SPL_TOKEN_2022 {
+                        p.route_mints.push(MintAccount {
+                            mint: accounts.quote_mint,
+                            token_program: quote_program,
+                            user_ata: accounts.user_quote_token_account,
+                        });
+                    }
+                    // A following pool checks Prism's next slice starts correctly.
+                    p.pools.push(futarchy(40));
+                    let pool_start = 6 + p.route_mints.len() * 2;
+                    let quote_user_index = if quote_program == SPL_TOKEN { 1 } else { 9 };
+                    let ix = build_find_arb_instruction(p).unwrap();
+                    assert_eq!(&ix.data[17..], &[30, 22]);
+                    assert_eq!(&ix.data[13..17], &budget.unwrap_or(0).to_le_bytes());
+                    assert_eq!(ix.data[1] & 0x08 != 0, ordered_route);
+                    assert_eq!(ix.accounts.len(), pool_start + 17 + 5);
+                    assert_eq!(&ix.accounts[pool_start..pool_start + 17], &expected);
+                    assert_eq!(ix.accounts[0], AccountMeta::new(accounts.user, true));
+                    assert_eq!(ix.accounts[pool_start + 1].pubkey, ix.accounts[0].pubkey);
+                    assert_eq!(ix.accounts[pool_start + 5], ix.accounts[7]);
+                    assert_eq!(ix.accounts[pool_start + 6], ix.accounts[quote_user_index]);
+                    let mut following = Vec::new();
+                    futarchy(40).try_append_account_metas(&mut following).unwrap();
+                    assert_eq!(&ix.accounts[pool_start + 17..], &following);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn pump_v2_rejects_invalid_token_programs_before_emitting_accounts() {
+    for (base_program, quote_program) in [(unique(99), SPL_TOKEN), (SPL_TOKEN, unique(99))] {
+        let market = MarketAccounts::PumpfunAmmV2(pump_v2_accounts(base_program, quote_program));
+        let error = BuildError::UnsupportedMarketTokenProgram {
+            market: "PumpfunAmmV2",
+            token_program: unique(99),
+        };
+        assert_eq!(market.try_market_id(), Err(error.clone()));
+        assert_eq!(market.try_account_count(), Err(error.clone()));
+        let mut metas = vec![AccountMeta::new(unique(100), false)];
+        let original = metas.clone();
+        assert_eq!(market.try_append_account_metas(&mut metas), Err(error.clone()));
+        assert_eq!(metas, original);
+        assert_eq!(build_find_arb_instruction(params(market)), Err(error));
+    }
 }
 
 #[test]

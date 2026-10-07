@@ -44,7 +44,7 @@ This crate is intentionally narrow. Callers must provide every account pubkey fr
 | [Meteora DLMM](#meteora-dlmm) | [`LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo`](https://solscan.io/account/LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo) |
 | [Meteora DAMM V2](#meteora-damm-v2) | [`cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG`](https://solscan.io/account/cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG) |
 | [Meteora Pools](#meteora-pools) | [`Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB`](https://solscan.io/account/Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB) |
-| [PumpfunAmm](#pumpfun-amm) | [`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`](https://solscan.io/account/pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA) |
+| Pumpfun AMM ([v1](#pumpfun-amm), [v2](#pumpfun-amm-v2)) | [`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`](https://solscan.io/account/pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA) |
 | [PancakeSwap](#clmm-base) | [`HpNfyc2Saw7RKkQd8nEL4khUcuPhQ7WwY1B2qjx8jxFq`](https://solscan.io/account/HpNfyc2Saw7RKkQd8nEL4khUcuPhQ7WwY1B2qjx8jxFq) |
 | [Byreal](#clmm-base) | [`REALQqNEomY6cQGZJUGwywTBD2UmDT32rZcNnfxQ5N2`](https://solscan.io/account/REALQqNEomY6cQGZJUGwywTBD2UmDT32rZcNnfxQ5N2) |
 | [Humidifi](#humidifi-swap-v2) | [`9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp`](https://solscan.io/account/9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp) |
@@ -402,6 +402,7 @@ user ATA                 writable
 26 ZeroFi
 28 GoonfiV2T22
 29 ByrealDynamic
+30 PumpfunAmmV2
 ```
 
 These are wire IDs emitted by this SDK. Legacy DLMM wire ID 4 is intentionally not exposed: `MeteoraDlmm` always emits wire ID 9 and the 16-account `swap2` layout, including for SPL/SPL pools. The deprecated `MarketAccounts::MeteoraDlmmT22` and `MarketId::MeteoraDlmmT22` names remain source aliases for the same wire ID 9 and layout; they do not emit ID 4.
@@ -658,6 +659,34 @@ the accounts for Swap2 on-chain.
 22     swap_fee_recipient                 caller
 23 W   swap_fee_ata                       caller
 ```
+
+### Pumpfun AMM v2
+
+Use `MarketAccounts::PumpfunAmmV2(markets::pumpfun::PumpfunAmmV2Accounts { ... })` for market **30** and its **17-account** layout. Both token-program fields accept SPL Token or Token-2022; the wire ID remains 30 for every combination. The existing `PumpfunAmm` variant retains market 7 and its 24-account layout.
+
+```text
+0  W   pool                               caller
+1  W   user                               caller; same as FindArbParams.signer
+2      global config                      SDK constant
+3      base_mint                          caller
+4      quote_mint                         caller
+5  W   user_base_token_account            caller
+6  W   user_quote_token_account           caller
+7  W   pool_base_vault                    caller
+8  W   pool_quote_vault                   caller
+9      base_token_program                 caller
+10     quote_token_program                caller
+11     system program                     SDK constant
+12 W   user_volume_accumulator            caller
+13     fee_config                         SDK constant
+14 W   buyback_fee_recipient              caller; quote-token ATA, not wallet
+15     event authority                    SDK constant
+16     Pumpfun AMM program                SDK constant
+```
+
+`user` must equal `FindArbParams.signer`. User token accounts and token programs must match the corresponding `MintAccount` entries in `base` or `route_mints`, in pool base/quote order for either swap direction.
+
+Cashback pools must use market 7. The buyback recipient's quote-token ATA must already exist, even when its fee is zero. Both directions require the user's volume accumulator PDA; first use may create it and top up rent for an older pool account. The caller supplies these addresses. Market 30 requires a Prism deployment supporting this layout.
 
 ### HumidiFi Swap v2
 
