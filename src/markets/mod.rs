@@ -33,6 +33,7 @@ pub enum MarketId {
     MeteoraDammV2 = 5,
     MeteoraPools = 6,
     PumpfunAmm = 7,
+    PumpfunAmmV2 = 30,
     Pancakeswap = 8,
     MeteoraDlmm = 9,
     RaydiumClmmT22 = 10,
@@ -78,6 +79,7 @@ impl MarketId {
             Self::MeteoraDammV2 => "MeteoraDammV2",
             Self::MeteoraPools => "MeteoraPools",
             Self::PumpfunAmm => "PumpfunAmm",
+            Self::PumpfunAmmV2 => "PumpfunAmmV2",
             Self::Pancakeswap => "Pancakeswap",
             Self::RaydiumClmmT22 => "RaydiumClmmT22",
             Self::PancakeswapT22 => "PancakeswapT22",
@@ -114,6 +116,7 @@ impl TryFrom<u8> for MarketId {
             5 => Ok(Self::MeteoraDammV2),
             6 => Ok(Self::MeteoraPools),
             7 => Ok(Self::PumpfunAmm),
+            30 => Ok(Self::PumpfunAmmV2),
             8 => Ok(Self::Pancakeswap),
             9 => Ok(Self::MeteoraDlmm),
             10 => Ok(Self::RaydiumClmmT22),
@@ -151,6 +154,7 @@ pub enum MarketAccounts {
     MeteoraDammV2(meteora::MeteoraDammV2Accounts),
     MeteoraPools(meteora::MeteoraPoolsAccounts),
     PumpfunAmm(pumpfun::PumpfunAmmAccounts),
+    PumpfunAmmV2(pumpfun::PumpfunAmmV2Accounts),
     Pancakeswap(pancakeswap::PancakeswapAccounts),
     #[deprecated(
         note = "use MeteoraDlmm; this alias emits wire ID 9 and the Swap2 layout"
@@ -248,6 +252,12 @@ impl MarketAccounts {
             Self::MeteoraDammV2(_) => MarketId::MeteoraDammV2,
             Self::MeteoraPools(_) => MarketId::MeteoraPools,
             Self::PumpfunAmm(_) => MarketId::PumpfunAmm,
+            Self::PumpfunAmmV2(accounts) => required_swap2_market_id(
+                "PumpfunAmmV2",
+                accounts.base_token_program,
+                accounts.quote_token_program,
+                MarketId::PumpfunAmmV2,
+            )?,
             Self::Pancakeswap(accounts) => paired_market_id(
                 "Pancakeswap",
                 accounts.token_program_0,
@@ -336,6 +346,7 @@ impl MarketAccounts {
             Self::MeteoraDammV2(accounts) => meteora::append_damm_v2(out, accounts),
             Self::MeteoraPools(accounts) => meteora::append_pools(out, accounts),
             Self::PumpfunAmm(accounts) => pumpfun::append_amm(out, accounts),
+            Self::PumpfunAmmV2(accounts) => pumpfun::append_amm_v2(out, accounts),
             Self::Pancakeswap(accounts) => {
                 if market_id == MarketId::PancakeswapT22 {
                     pancakeswap::append_t22_auto(out, accounts);
@@ -408,6 +419,7 @@ fn account_count_for_market(market_id: MarketId) -> usize {
         MarketId::MeteoraDammV2 => 11,
         MarketId::MeteoraPools => 14,
         MarketId::PumpfunAmm => 24,
+        MarketId::PumpfunAmmV2 => 17,
         MarketId::Pancakeswap => 11,
         MarketId::RaydiumClmmT22 => 15,
         MarketId::PancakeswapT22 => 15,

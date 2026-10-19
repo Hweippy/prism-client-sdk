@@ -2,6 +2,7 @@ use solana_pubkey::Pubkey;
 
 pub const PROGRAM_ID: Pubkey = Pubkey::from_str_const("Prism8hsRo6Ww5jiN5Zeh3YDPLZHqHduCPSAV7JF7qv");
 
+pub(crate) const FLAG_ORDERED_ROUTE: u8 = 1 << 3;
 pub(crate) const FLAG_FLASHLOAN: u8 = 1 << 0;
 pub(crate) const FLAG_FAIL_IF_NO_PROFIT: u8 = 1 << 1;
 
@@ -24,5 +25,5 @@ pub(crate) const SYSTEM_PROGRAM: Pubkey = Pubkey::from_str_const("11111111111111
 pub(crate) const SYSVAR_CLOCK: Pubkey = Pubkey::from_str_const("SysvarC1ock11111111111111111111111111111111");
 pub(crate) const SYSVAR_INSTRUCTIONS: Pubkey = Pubkey::from_str_const("Sysvar1nstructions1111111111111111111111111");
 
-/// Unified manual/autosized arbitrage with an optional additive fee.
+/// Unified arbitrage with optional ordered routes, autosizing, and an additive fee.
 pub const FIND_ARB_DISCRIMINATOR: u8 = 13;

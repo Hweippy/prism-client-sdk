@@ -39,6 +39,30 @@ pub struct PumpfunAmmAccounts {
     pub swap_fee_ata: Pubkey,
 }
 
+/// PumpSwap v2's fixed 17-account trade layout (market ID 30).
+///
+/// `user` must equal `FindArbParams.signer`. User token accounts must match
+/// the corresponding mint records in `FindArbParams.base` or `route_mints`,
+/// in pool base/quote order for either swap direction.
+/// Cashback pools must use [`PumpfunAmmAccounts`] (market ID 7), because
+/// PumpSwap v2 does not support cashback pools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PumpfunAmmV2Accounts {
+    pub pool: Pubkey,
+    pub user: Pubkey,
+    pub base_mint: Pubkey,
+    pub quote_mint: Pubkey,
+    pub user_base_token_account: Pubkey,
+    pub user_quote_token_account: Pubkey,
+    pub pool_base_vault: Pubkey,
+    pub pool_quote_vault: Pubkey,
+    pub base_token_program: Pubkey,
+    pub quote_token_program: Pubkey,
+    pub user_volume_accumulator: Pubkey,
+    /// The buyback recipient's quote-token ATA, not the recipient wallet.
+    pub buyback_fee_recipient: Pubkey,
+}
+
 pub(super) fn append_amm(out: &mut Vec<AccountMeta>, accounts: PumpfunAmmAccounts) {
     let user_volume_wsol_ata = accounts.user_volume_accumulator_wsol_ata.unwrap_or(PUMPFUN_AMM);
     push_w(out, accounts.pool);
@@ -69,4 +93,24 @@ pub(super) fn append_amm(out: &mut Vec<AccountMeta>, accounts: PumpfunAmmAccount
     push_ro(out, accounts.pool_v2.unwrap_or(PUMPFUN_AMM));
     push_ro(out, accounts.swap_fee_recipient);
     push_w(out, accounts.swap_fee_ata);
+}
+
+pub(super) fn append_amm_v2(out: &mut Vec<AccountMeta>, accounts: PumpfunAmmV2Accounts) {
+    push_w(out, accounts.pool);
+    push_w(out, accounts.user);
+    push_ro(out, PUMPFUN_GLOBAL_CONFIG);
+    push_ro(out, accounts.base_mint);
+    push_ro(out, accounts.quote_mint);
+    push_w(out, accounts.user_base_token_account);
+    push_w(out, accounts.user_quote_token_account);
+    push_w(out, accounts.pool_base_vault);
+    push_w(out, accounts.pool_quote_vault);
+    push_ro(out, accounts.base_token_program);
+    push_ro(out, accounts.quote_token_program);
+    push_ro(out, SYSTEM_PROGRAM);
+    push_w(out, accounts.user_volume_accumulator);
+    push_ro(out, PUMPFUN_FEE_CONFIG);
+    push_w(out, accounts.buyback_fee_recipient);
+    push_ro(out, PUMPFUN_EVENT_AUTHORITY);
+    push_ro(out, PUMPFUN_AMM);
 }
