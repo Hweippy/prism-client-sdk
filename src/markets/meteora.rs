@@ -66,13 +66,13 @@ pub struct MeteoraPoolsAccounts {
 
 pub(super) fn append_dlmm(out: &mut Vec<AccountMeta>, accounts: MeteoraDlmmAccounts) {
     push_w(out, accounts.lb_pair);
-    push_w(out, accounts.bin_array_bitmap_ext);
+    push_dlmm_optional(out, accounts.bin_array_bitmap_ext);
     push_w(out, accounts.reserve_x);
     push_w(out, accounts.reserve_y);
     push_ro(out, accounts.token_x_mint);
     push_ro(out, accounts.token_y_mint);
     push_w(out, accounts.oracle);
-    push_w(out, accounts.host_fee_in.unwrap_or(METEORA_DLMM));
+    push_dlmm_optional(out, accounts.host_fee_in.unwrap_or(METEORA_DLMM));
     push_ro(out, accounts.token_x_program);
     push_ro(out, accounts.token_y_program);
     push_ro(out, SPL_MEMO);
@@ -81,6 +81,19 @@ pub(super) fn append_dlmm(out: &mut Vec<AccountMeta>, accounts: MeteoraDlmmAccou
     push_w(out, accounts.bin_array_prev);
     push_w(out, accounts.bin_array_cur);
     push_w(out, accounts.bin_array_next);
+}
+
+/// An optional DLMM account (bitmap extension or `host_fee_in`) is writable,
+/// but the DLMM program id placeholder is read-only. A writable placeholder
+/// makes the transaction write-lock the DLMM program id, which conflicts with
+/// every other DLMM swap. Prism builds before `a2706878` forward the slot
+/// writable and need a writable placeholder.
+fn push_dlmm_optional(out: &mut Vec<AccountMeta>, key: Pubkey) {
+    if key == METEORA_DLMM {
+        push_ro(out, key);
+    } else {
+        push_w(out, key);
+    }
 }
 
 pub(super) fn append_damm_v2(out: &mut Vec<AccountMeta>, accounts: MeteoraDammV2Accounts) {

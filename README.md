@@ -573,13 +573,13 @@ Automatically selected for `OrcaWhirlpool` when either supplied endpoint token p
 
 ```text
 0  W   lb_pair                            caller
-1  W   bin_array_bitmap_ext               caller
+1  W*  bin_array_bitmap_ext               caller
 2  W   reserve_x                          caller
 3  W   reserve_y                          caller
 4      token_x_mint                       caller
 5      token_y_mint                       caller
 6  W   oracle                             caller
-7  W   host_fee_in or DLMM placeholder    caller option or SDK constant
+7  W*  host_fee_in or DLMM placeholder    caller option or SDK constant
 8      token_x_program                    caller
 9      token_y_program                    caller
 10     Memo v3 program                    SDK constant
@@ -589,6 +589,12 @@ Automatically selected for `OrcaWhirlpool` when either supplied endpoint token p
 14 W   bin_array_cur                      caller
 15 W   bin_array_next                     caller
 ```
+
+`W*`: a real account is writable. The DLMM program id placeholder is emitted
+read-only, so the transaction does not write-lock the DLMM program id (that lock
+conflicts with every other DLMM swap). This needs a Prism build at or after
+`a2706878`: older builds forward these slots writable and fail with
+`PrivilegeEscalation` on a read-only placeholder.
 
 The `prev/cur/next` field names are retained API names for the three fixed
 slots. Bitmap-aware callers may supply a compact directional live-array union

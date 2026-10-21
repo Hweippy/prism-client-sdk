@@ -1327,7 +1327,28 @@ fn documented_placeholders_use_market_program_sentinels() {
     });
     let mut metas = Vec::new();
     dlmm.try_append_account_metas(&mut metas).unwrap();
-    assert_eq!(metas[7], AccountMeta::new(METEORA_DLMM, false));
+    assert_eq!(metas[1], AccountMeta::new(unique(2), false));
+    assert_eq!(metas[7], AccountMeta::new_readonly(METEORA_DLMM, false));
+
+    let dlmm_bitmap_sentinel = MarketAccounts::MeteoraDlmm(MeteoraDlmmAccounts {
+        lb_pair: unique(1),
+        bin_array_bitmap_ext: METEORA_DLMM,
+        reserve_x: unique(3),
+        reserve_y: unique(4),
+        token_x_mint: unique(5),
+        token_y_mint: unique(6),
+        oracle: unique(7),
+        host_fee_in: Some(unique(8)),
+        token_x_program: SPL_TOKEN,
+        token_y_program: SPL_TOKEN,
+        bin_array_prev: unique(10),
+        bin_array_cur: unique(11),
+        bin_array_next: unique(12),
+    });
+    let mut metas = Vec::new();
+    dlmm_bitmap_sentinel.try_append_account_metas(&mut metas).unwrap();
+    assert_eq!(metas[1], AccountMeta::new_readonly(METEORA_DLMM, false));
+    assert_eq!(metas[7], AccountMeta::new(unique(8), false));
 
     let damm = MarketAccounts::MeteoraDammV2(MeteoraDammV2Accounts {
         pool: unique(1),
